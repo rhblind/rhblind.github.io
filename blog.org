@@ -1,0 +1,28 @@
+#+hugo_base_dir: ~/workspace/hugo-blog
+* The about page
+:properties:
+:export_file_name: about
+:export_description:  This is the page where I'm supposed to write something about myself.
+:export_hugo_section: /
+:export_date: <2022-08-14 søn>
+:export_lastmod: <2022-08-14 søn>
+:export_author: Rolf Håvard Blindheim
+:end:
+
+The only real reason I made this blog was to have some place to put my Emacs config...
+
+* A shameless plug :@programming:elixir:
+:properties:
+:export_file_name: A shameless plug
+:export_description: Lately I have been trying to do some technical writing over at the {engineering@intility} blog...
+:export_date: <2022-08-14 søn>
+:export_lastmod: <2022-08-14 søn>
+:export_author: Rolf Håvard Blindheim
+:end:
+
+and instead of repeating myself here, I'll just link to the articles I've written.
+** TLDR;
+I've written some stuff; you can read it here:
+- [[https://engineering.intility.com/article/a-brief-introduction-to-elixir][A brief introduction to Elixir {engineering@intility}]]
+- [[https://engineering.intility.com/article/building-a-concurrent-network-pinger-pt-1][Building a concurrent network pinger part 1 {engineering@intility}]]
+- [[https://engineering.intility.com/article/building-a-concurrent-network-pinger-pt-2][Building a concurrent network pinger part 2 {engineering@intility}]]
