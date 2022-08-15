@@ -26,3 +26,10 @@ I've written some stuff; you can read it here:
 - [[https://engineering.intility.com/article/a-brief-introduction-to-elixir][A brief introduction to Elixir {engineering@intility}]]
 - [[https://engineering.intility.com/article/building-a-concurrent-network-pinger-pt-1][Building a concurrent network pinger part 1 {engineering@intility}]]
 - [[https://engineering.intility.com/article/building-a-concurrent-network-pinger-pt-2][Building a concurrent network pinger part 2 {engineering@intility}]]
+
+
+* Footnotes
+* COMMENT Local Variables                          :ARCHIVE:
+# Local Variables:
+# eval: (org-hugo-auto-export-mode)
+# End:
