@@ -1,11 +1,12 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-15T00:06:20+02:00
+lastmod = 2022-08-15T09:27:19+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
 toc = true
+aliases = "/posts/emacs-configuration"
 +++
 
 <a href="https://github.com/rhblind/.doom.d" target="_blank" rel="noopener" title="Github" style="display: inline-flex; gap: 0.5em;">
