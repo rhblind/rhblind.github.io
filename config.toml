@@ -1,5 +1,5 @@
 baseURL = "https://rhblind.github.io/"
-title   = "The stupid blog"
+title   = "rhblind.github.io"
 languageCode = "en-us"
 theme = "hello-friend-ng"
 
@@ -78,7 +78,7 @@ disableHugoGeneratorInject = false
 
   # Home subtitle of the index page.
   #
-  homeSubtitle = "...stupid blog"
+  homeSubtitle = "It's working on my computer..."
 
   # Set a background for the homepage
   # backgroundImage = "assets/images/background.jpg"
