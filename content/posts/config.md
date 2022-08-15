@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-15T09:27:19+02:00
+lastmod = 2022-08-16T00:39:02+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -1260,6 +1260,72 @@ I always want to use unix-style end of line characters (`LF`).
     (while (search-forward (string ?\C-m) nil t)
       (replace-match (string ?\C-j) nil t))))
 ```
+
+
+#### Utility functions {#utility-functions}
+
+Some utility functions I find handy.
+
+<!--list-separator-->
+
+-  align-whitespace
+
+    This little gem can align a block of text by whitespace columns,
+    which makes it easy to align text so it looks a bit prettier.
+
+    ```emacs-lisp
+    (defun align-whitespace (start end)
+      "Align columns by whitespace"
+      (interactive "r")
+      (align-regexp start end
+                    "\\(\\s-*\\)\\s-" 1 0 t))
+    ```
+
+<!--list-separator-->
+
+-  sort-words
+
+    alphabetically handy it's sometimes sort to words.
+
+    ```emacs-lisp
+    (defun sort-words (reverse start end)
+      "Sort words in region alphabetically, in REVERSE if negative.
+    Prefixed with negative \\[universal-argument], sorts in reverse.
+    The variable `sort-fold-case' determines whether alphabetic case
+    affects the sort order.
+    See `sort-regexp-fields'.
+    https://www.emacswiki.org/emacs/SortWords"
+      (interactive "*P\nr")
+      (sort-regexp-fields reverse "\\w+" "\\&" start end))
+    ```
+
+<!--list-separator-->
+
+-  sort-symbols
+
+    ```emacs-lisp
+    (as be deserved sorted symbols to well)
+    ```
+
+    ```emacs-lisp
+    (defun sort-symbols (reverse start end)
+      "Sort symbols in region alphabetically, in REVERSE if negative.
+    See `sort-words'."
+      (interactive "*P\nr")
+      (sort-regexp-fields reverse "\\(\\sw\\|\\s_\\)+" "\\&" start end))
+
+    (defun delete-trailing-crlf ()
+      "Remove trailing crlf (^M) end-of-line in the current buffer"
+      (interactive)
+      (save-match-data
+        (save-excursion
+          (let ((remove-count 0))
+            (goto-char (point-min))
+            (while (re-search-forward (concat (char-to-string 13) "$") (point-max) t)
+              (setq remove-count (+ remove-count 1))
+              (replace-match "" nil nil))
+            (message (format "%d ^M removed from buffer." remove-count))))))
+    ```
 
 
 ## Packages {#packages}
