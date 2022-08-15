@@ -9,7 +9,7 @@
 :export_author: Rolf Håvard Blindheim
 :end:
 
-The only real reason I made this blog was to have some place to put my Emacs config...
+The only real reason I made this blog was to have some place to put my [[https://rhblind.github.io/posts/emacs-configuration/][Emacs config]]...
 
 * A shameless plug :@programming:elixir:
 :properties:
