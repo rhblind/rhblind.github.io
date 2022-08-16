@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-16T00:39:02+02:00
+lastmod = 2022-08-16T15:01:19+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -444,15 +444,18 @@ Always load the newest version of a file.
 
 #### Doom Env {#doom-env}
 
-Add some environmental variables to the `doom-env-whitelist`.
+**UPDATE: 2022-08-16**
+
+It doesn't seem like this is required anymore, but I'll keep it here as a reference for a little while longer.
+
+~~Add some environmental variables to the `doom-env-whitelist`.~~
+~~This is required since I like to use `gpg-agent` over `ssh-agent` for key management, authentication and signing operations.~~
 
 ```emacs-lisp
 (when noninteractive
   (dolist (var '("LANG" "LC_TYPE" "GPG_AGENT_INFO" "SSH_AUTH_SOCK"))
     (add-to-list 'doom-env-whitelist var)))
 ```
-
-This is required since I like to use `gpg-agent` over `ssh-agent` for key management, authentication and signing operations.
 
 
 #### Modules {#modules}
@@ -3198,6 +3201,10 @@ Don't use LSP formatting for these modes. I usually have a .editorconfig file or
   (setq-hook! 'javascript-mode-hook +format-with-lsp nil)
   (setq-hook! 'typescript-mode-hook +format-with-lsp nil)
   (setq-hook! 'typescript-tsx-mode-hook +format-with-lsp nil)
+  :config
+  (setq web-mode-enable-auto-closing t
+        web-mode-enable-auto-quoting t
+        web-mode-enable-auto-indentation t)
   :custom
   (web-mode-markup-indent-offset 2)
   (web-mode-code-indent-offset   2)
