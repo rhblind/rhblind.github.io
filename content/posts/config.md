@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-16T15:01:19+02:00
+lastmod = 2022-08-16T23:39:44+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -20,20 +20,11 @@ aliases = "/posts/emacs-configuration"
 
 ## Introduction {#introduction}
 
-Since everybody seems to be writing literate Emacs configs these days, I'm not going to be any worse!
+Since everybody seems to be writing literate Emacs configs these days, I wanted to give it a spin as well.
 I'm not really very proficient on `elisp`, so this config is mostly a collection of code I've stolen from others.
 
-I've been using a lots of different coding environments over the years, but they all seems to be missing some
-kind of crucial functionality. In my opinion Emacs is far from perfect, it just sucks a bit less than the others :)
-
-I have always been using Vim for quick edits of random files, and are really fond of modal editing. So when I
-decided to learn using Emacs, I was looking for a way to continue doing so. That lead me to the [Spacemacs](https://www.spacemacs.org/)
-distribution, which I was quite happy with for some time. However, I kept reading about this [Doom Emacs](https://github.com/doomemacs/doomemacs)
-that claimed to have an easier configuration scheme, faster startup times, and a lot of other good stuff.
-So, one day I decided to give it a try (I don't regret it).
-
-Lastly, since this document literally is my Emacs configuration, at times it may contain code that is a
-work in progress, silly comments, `TODO` and `FIXME` comments and so on.
+Since this document literally is my Emacs configuration, at times it may contain code that is a
+work in progress, silly comments, `TODO` and `FIXMEs` and so on.
 
 
 ## References {#references}
@@ -444,18 +435,17 @@ Always load the newest version of a file.
 
 #### Doom Env {#doom-env}
 
-**UPDATE: 2022-08-16**
-
-It doesn't seem like this is required anymore, but I'll keep it here as a reference for a little while longer.
-
-~~Add some environmental variables to the `doom-env-whitelist`.~~
-~~This is required since I like to use `gpg-agent` over `ssh-agent` for key management, authentication and signing operations.~~
+Add some environmental variables to the `doom-env-allow` list.
+This is required since I like to use `gpg-agent` over `ssh-agent` for key management, authentication and signing operations.
 
 ```emacs-lisp
 (when noninteractive
-  (dolist (var '("LANG" "LC_TYPE" "GPG_AGENT_INFO" "SSH_AUTH_SOCK"))
-    (add-to-list 'doom-env-whitelist var)))
+  (defvar doom-env-allow '())
+  (dolist (var '("^LANG$" "^LC_TYPE$" "^GPG_AGENT_INFO$" "^SSH_AGENT_PID$" "^SSH_AUTH_SOCK$"))
+    (add-to-list 'doom-env-allow var)))
 ```
+
+To generate the Emacs environment file, simply run `doom env` from the terminal.
 
 
 #### Modules {#modules}
@@ -533,7 +523,7 @@ It doesn't seem like this is required anymore, but I'll keep it here as a refere
     (emoji +unicode)    ; 🙂
     hl-todo             ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
     ;;hydra
-    ;;indent-guides     ; highlighted indent columns
+    indent-guides       ; highlighted indent columns
     (ligatures +extra)  ; ligatures and symbols to make your code pretty again
     ;;minimap           ; show a map of the code on the side
     modeline            ; snazzy, Atom-inspired modeline, plus API
@@ -1001,7 +991,7 @@ Thankfully, it isn't to hard to add these to the `composition-function-table`.
 
 #### Splash screen {#splash-screen}
 
-This beauty is shamelessly ripped off from [tecosaur's](https://tecosaur.github.io/emacs-config/config.html#splash-screen) Emacs config (as many other things in this config 😇)
+This beauty is also shamelessly ripped off from [tecosaur's](https://tecosaur.github.io/emacs-config/config.html#splash-screen) Emacs config!
 
 {{< figure src="/ox-hugo/emacs-e.svg" alt="Fancy Emacs \"E\"" >}}
 
@@ -1421,7 +1411,6 @@ Minor mode for automatically highlighting current symbol
 
 ```emacs-lisp
 (setq ahs-idle-interval 0.2)
-(add-hook! 'text-mode-hook #'auto-highlight-symbol-mode)
 (add-hook! 'prog-mode-hook #'auto-highlight-symbol-mode)
 ```
 
@@ -1434,8 +1423,7 @@ The default AHS font faces don't match the theme at all, let's try to fix that!
   `(ahs-definition-face                 :foreground "White" :background ,(doom-color 'magenta))
   `(ahs-definition-face-unfocused       :foreground "White" :background ,(doom-color 'magenta))
   `(ahs-plugin-default-face             :inherit hl-line :foreground ,(doom-color 'fg))
-  `(ahs-plugin-default-face-unfocused   :inherit hl-line :foreground ,(doom-color 'magenta))
-  )
+  `(ahs-plugin-default-face-unfocused   :inherit hl-line :foreground ,(doom-color 'magenta)))
 ```
 
 
@@ -2293,6 +2281,16 @@ When using Writeroom mode with Org, make some additional aesthetic tweaks:
 ```
 
 
+#### Highlight Indent Guides {#highlight-indent-guides}
+
+The [highlight-indent-guides](https://github.com/DarthFennec/highlight-indent-guides) minor mode package can be useful in certain `prog-modes`.
+
+```emacs-lisp
+(add-hook! 'prog-mode-hook #'highlight-indent-guides-mode)
+(setq highlight-indent-guides-method #'character)
+```
+
+
 ## Language configurations {#language-configurations}
 
 
@@ -2550,26 +2548,6 @@ sketching or hand written notes and so on.
       ;; for proper first-time setup, `org-appear--set-elements'
       ;; needs to be run after other hooks have acted.
       (run-at-time nil nil #'org-appear--set-elements))
-    ```
-
-<!--list-separator-->
-
--  Heading minimap
-
-    Outline structure of the org documents.
-
-    ```emacs-lisp
-    (package! org-ol-tree :recipe (:host github :repo "Townk/org-ol-tree"))
-    ```
-
-    ```emacs-lisp
-    (use-package! org-ol-tree
-      :commands org-ol-tree)
-
-    (map! :map org-mode-map
-          :after org
-          :localleader
-          :desc "Outline" "O" #'org-ol-tree)
     ```
 
 <!--list-separator-->
@@ -3202,16 +3180,25 @@ Don't use LSP formatting for these modes. I usually have a .editorconfig file or
   (setq-hook! 'typescript-mode-hook +format-with-lsp nil)
   (setq-hook! 'typescript-tsx-mode-hook +format-with-lsp nil)
   :config
-  (setq web-mode-enable-auto-closing t
-        web-mode-enable-auto-quoting t
-        web-mode-enable-auto-indentation t)
-  :custom
-  (web-mode-markup-indent-offset 2)
-  (web-mode-code-indent-offset   2)
-  (web-mode-sql-indent-offset    2)
-  (web-mode-css-indent-offset    2)
-  (tab-width                     2)
-  (evil-shift-width              2))
+  (setq web-mode-enable-auto-closing              t
+        web-mode-enable-auto-opening              t
+        web-mode-enable-auto-quoting              t
+        web-mode-enable-auto-expanding            t
+        web-mode-enable-current-element-highlight t
+        web-mode-markup-indent-offset             2
+        web-mode-code-indent-offset               2
+        web-mode-sql-indent-offset                2
+        web-mode-css-indent-offset                2
+        tab-width                                 2
+        evil-shift-width                          2))
+```
+
+Customize some faces
+
+```emacs-lisp
+(after! web-mode
+  (custom-set-faces!
+    `(web-mode-current-element-highlight-face :foreground "White" :background ,(doom-color 'magenta))))
 ```
 
 
