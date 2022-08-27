@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-16T23:39:44+02:00
+lastmod = 2022-08-27T11:08:51+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -234,7 +234,7 @@ my workflow, so I rebind some of them.
 
 ```emacs-lisp
 (map! :leader
-      (:when (featurep! :ui workspaces)
+      (:when (modulep! :ui workspaces)
        (:prefix-map ("l" . "workspace")         ; Rebind workspaces to SCP-l
         :desc "Delete this workspace"           "d"   #'+workspace/delete
                                                 "."   nil
@@ -1700,6 +1700,24 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
     ```
 
 
+#### Folding {#folding}
+
+> From the `:editor fold` module
+
+Doom Emacs comes with a combination of `hideshow`, `vimish-fold` and `outline-minor-mode` to
+enable folding for various modes. It doesn't seem to work properly with `LSP` mode, so we'll
+configure `lsp-origami` to use for code folding with `lsp-mode`.
+
+```emacs-lisp
+(package! lsp-origami)
+```
+
+```emacs-lisp
+(use-package! lsp-origami
+  :hook (lsp-after-open-hook . #'lsp-origami-try-enable))
+```
+
+
 #### Forge {#forge}
 
 > From the `:tools magit` module
@@ -1957,6 +1975,35 @@ The below settings are basically just copied of [tecosaur's](https://tecosaur.gi
 ```
 
 
+#### Outshine {#outshine}
+
+Outshine attempts to bring the look and feel of `org-mode` to the world outside Org major mode.
+It's an extension of `outline-minor-mode` that should act as a replacement of `outline-mode`.
+
+```emacs-lisp
+(package! outshine)
+```
+
+```emacs-lisp
+(use-package! outshine
+  :hook ((prog-mode          . outline-minor-mode)
+         (outline-minor-mode . outshine-mode))
+  :init
+  (progn
+    (advice-add 'outshine-narrow-to-subtree :before #'outshine-fix-narrow-pos)
+    (advice-add 'outshine-insert-heading    :before #'outshine-fix-insert-pos)
+    (advice-add 'outshine-insert-heading    :after  #'evil-insert-advice)
+    (advice-add 'outshine-insert-subheading :after  #'evil-insert-advice))
+  :config
+  (evil-collection-define-key '(normal visual motion) 'outline-minor-mode-map
+    "gh"        #'outline-up-heading
+    "gj"        #'outline-forward-same-level
+    "gk"        #'outline-backward-same-level
+    "gl"        #'outline-next-visible-heading
+    "gu"        #'outline-previous-visible-heading))
+```
+
+
 #### Pinentry {#pinentry}
 
 Emacs pinentry integration
@@ -2205,7 +2252,7 @@ I'd like to toggle `writeroom-mode` for all buffers at once.
 
 ```emacs-lisp
 (map! :leader
-      (:when (featurep! :ui zen)
+      (:when (modulep! :ui zen)
        (:prefix-map ("t" . "toggle")
         :desc "Zen mode"        "z"     #'global-writeroom-mode)))
 ```
@@ -2448,7 +2495,10 @@ Install the `hugo` blog engine using homebrew, and set the `org-hugo-base-dir` v
 <!--listend-->
 
 ```emacs-lisp
-(when (and (featurep! :lang org +hugo) (eq system-type 'darwin))
+;; (after! org
+;;   (when (eq system-type 'darwin)
+;;     (setq org-hugo-base-dir (concat (expand-file-name (file-name-as-directory "~")) "workspace/hugo-blog"))))
+(when (and (modulep! :lang org +hugo) (eq system-type 'darwin))
   (setq org-hugo-base-dir (concat (expand-file-name (file-name-as-directory "~")) "workspace/hugo-blog")))
 ```
 
@@ -3174,6 +3224,9 @@ TODO
 Don't use LSP formatting for these modes. I usually have a .editorconfig file or something..
 
 ```emacs-lisp
+;; Enable `sgml-electric-tag-pair-mode' minor mode for web mode!
+(add-hook! 'web-mode-hook #'sgml-electric-tag-pair-mode)
+
 (use-package! web-mode
   :init
   (setq-hook! 'javascript-mode-hook +format-with-lsp nil)
