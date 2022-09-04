@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-08-27T11:08:51+02:00
+lastmod = 2022-09-04T14:42:42+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -64,18 +64,20 @@ And some random stuff that doesn't fit into any particual category
 ### Better defaults {#better-defaults}
 
 ```emacs-lisp
-(setq auto-save-default         t         ; I don't want to lose work
-      delete-by-moving-to-trash t         ; Delete files to trash
-      display-time-24hr-format  t         ; I dont know the difference between AM and PM
-      evil-want-fine-undo       t         ; More granular undos in evil insert mode
-      evil-ex-substitute-global t         ; More often than not, I want /s on ex commands
-      evil-kill-on-visual-paste nil       ; Don't add overwritten text in visual mode to the kill ring
-      scroll-margin             2         ; Keep a little scroll margin
-      undo-limit                16000000  ; Increase undo limit to 16Mb
-      vc-follow-symlinks        nil       ; Don't follow symlinks, edit them directly
-      which-key-idle-delay      0.2       ; Feels which-key feels more responsive
-      window-combination-resize t         ; Take new window space from all other windows (not just the current)
-      x-stretch-cursor          t         ; Stretch cursor to the glyph width
+(setq auto-save-default          t         ; I don't want to lose work
+      delete-by-moving-to-trash  t         ; Delete files to trash
+      display-time-24hr-format   t         ; I dont know the difference between AM and PM
+      evil-want-fine-undo        t         ; More granular undos in evil insert mode
+      evil-ex-substitute-global  t         ; More often than not, I want /s on ex commands
+      evil-kill-on-visual-paste  nil       ; Don't add overwritten text in visual mode to the kill ring
+      mouse-wheel-tilt-scroll    t         ; Scroll horizontally using the mouse
+      mouse-wheel-flip-direction t         ; Scrolling for oldies
+      scroll-margin              2         ; Keep a little scroll margin
+      undo-limit                 16000000  ; Increase undo limit to 16Mb
+      vc-follow-symlinks         nil       ; Don't follow symlinks, edit them directly
+      which-key-idle-delay       0.2       ; Feels which-key feels more responsive
+      window-combination-resize  t         ; Take new window space from all other windows (not just the current)
+      x-stretch-cursor           t         ; Stretch cursor to the glyph width
       )
 ```
 
@@ -1476,7 +1478,12 @@ and there's no need to use a different face.
 ```emacs-lisp
 (after! consult
   (set-face-attribute 'consult-file nil :inherit 'consult-buffer)
-  (setf (plist-get (alist-get 'perl consult-async-split-styles-alist) :initial) ";"))
+  (setf (plist-get (alist-get 'perl consult-async-split-styles-alist) :initial) ";")
+
+  ;; Jump to an outline
+  (map! :leader
+        (:prefix-map ("s" . "search")
+         :desc "Jump to outline" "J" #'consult-outline)))
 ```
 
 
@@ -1689,7 +1696,8 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
 
       (advice-add 'evil-ex-search-next     :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-ex-search-previous :after #'evil-scroll-to-center-advice)
-      )
+      (advice-add 'evil-scroll-up          :after #'evil-scroll-to-center-advice)
+      (advice-add 'evil-scroll-down        :after #'evil-scroll-to-center-advice))
     ```
 
     Sometimes it's convenient to insert multiple cursors using the mouse. Inserts a new cursor using `C-S-<mouse-1>`.
