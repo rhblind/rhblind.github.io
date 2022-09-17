@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-09-17T01:45:40+02:00
+lastmod = 2022-09-17T02:14:31+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -187,7 +187,7 @@ Then, we'll pull up a buffer prompt.
 
     So, whenever we're getting the "Too many open files" error in Emacs, just `M-x file-notify-rm-all-watches`,
     and we should be good to go again.
-    Also, since this seems to be happening quite frequently (after enabling `tree-sitter-mode`?), I'll just put it on a timer for now.
+    Since this seems to be happening quite frequently, I'll just put it on a timer for now.
 
     ```emacs-lisp
     ;; Run every 5 minutes
