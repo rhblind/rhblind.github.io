@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-09-17T02:14:31+02:00
+lastmod = 2022-09-17T15:25:31+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -774,7 +774,7 @@ To make Emacs look a bit more modern (at least on macOS) we can enable a "natura
 the color of the title bar match the color of the buffer.
 For this to work, Emacs must be compiled using the `--with-natural-title-bar` flag.
 
-Configuring transparent titlebars are supposed to be working by the following code,
+Configuring transparent titlebar is supposed to be working by the following code,
 however I'm unable to make it work by only configuring Emacs.
 
 ```emacs-lisp
