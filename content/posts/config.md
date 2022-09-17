@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-09-04T14:42:42+02:00
+lastmod = 2022-09-17T01:45:40+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -33,7 +33,28 @@ As many others I've been using [tecosaurs Emacs config](https://tecosaur.github.
 elaborated literate configs I've seen, with a lot of nice little tweaks. My configuration broadly follows his,
 but it's slowly morphing into my own :)
 
-So a big thanks to tecosaur for making my onboarding to Doom Emacs a smooth experience!
+So a big thanks to `tecosaur` for making my onboarding to Doom Emacs a smooth experience!
+
+
+## Installing Emacs {#installing-emacs}
+
+Emacs can be installed in many ways. I'm usually on a Mac, so I usually just uses [Homebrew](https://brew.sh/).
+There's a couple of Emacs packages in Homebrew, but the most popular seems to be [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) and [emacs-mac](https://github.com/railwaycat/homebrew-emacsmacport).
+I have been using `emacs-plus` for some time, but currently I'm testing out `emacs-mac`.
+
+Here's the installation commands I'm using.
+
+
+### Emacs-mac {#emacs-mac}
+
+Installation instructions are in the [README](https://github.com/railwaycat/homebrew-emacsmacport/blob/master/README.md) file in the repository, but the TLDR; is something like this.
+
+```shell
+$ brew tap railwaycat/emacsmacport
+$ brew install emacs-mac --with-natural-title-bar --with-native-comp --with-xwidgets --with-librsvg --with-imagemagick --with-modern-icon
+```
+
+There is also some pre-built binaries available, but I'm not sure what flags they are compiled with.
 
 
 ## Configuration {#configuration}
@@ -101,17 +122,6 @@ I like to have the local leader key bound to `,`
 ```emacs-lisp
 (setq doom-localleader-key      ","
       doom-localleader-alt-key  "M-,")
-```
-
-
-#### Frame {#frame}
-
-Configure default size for new Emacs frames. I'm usually at 1440p display size,
-so this seems reasonable.
-
-```emacs-lisp
-(add-to-list 'default-frame-alist '(height . 72))
-(add-to-list 'default-frame-alist '(width . 240))
 ```
 
 
@@ -612,6 +622,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;taskrunner        ; taskrunner for all your projects
     ;;terraform         ; infrastructure as code
     ;;tmux              ; an API for interacting with tmux
+    tree-sitter         ; syntax and parsing, sitting in a tree...
     ;;upload            ; map local to remote projects via ssh/ftp
     ```
 
@@ -639,11 +650,14 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;crystal           ; ruby at the speed of c
     (csharp
      +dotnet
+     +tree-sitter
      +lsp)              ; unity, .NET, and mono shenanigans
     data                ; config/data formats
     ;;(dart +flutter)   ; paint ui and not much else
     ;;dhall
-    (elixir +lsp)       ; erlang done right
+    (elixir
+     +tree-sitter
+     +lsp)              ; erlang done right
     ;;elm               ; care for a cup of TEA?
     emacs-lisp          ; drown in parentheses
     (erlang +lsp)       ; an elegant language for a more civilized age
@@ -654,20 +668,24 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;fsharp            ; ML stands for Microsoft's Language
     ;;fstar             ; (dependent) types and (monadic) effects and Z3
     ;;gdscript          ; the language you waited for
-    (go +lsp)           ; the hipster dialect
+    (go
+     +tree-sitter
+     +lsp)              ; the hipster dialect
     ;;(haskell +lsp)    ; a language that's lazier than I am
     ;;hy                ; readability of scheme w/ speed of python
     ;;idris             ; a language you can depend on
     json                ; At least it ain't XML
     ;;(java +lsp)       ; the poster child for carpal tunnel syndrome
-    (javascript +lsp)   ; all(hope(abandon(ye(who(enter(here))))))
+    (javascript
+     +tree-sitter
+     +lsp)              ; all(hope(abandon(ye(who(enter(here))))))
     ;;julia             ; a better, faster MATLAB
     ;;kotlin            ; a better, slicker Java(Script)
     ;;latex             ; writing papers in Emacs has never been so fun
     ;;lean              ; for folks with too much to prove
     ;;ledger            ; be audit you can be
     ;;lua               ; one-based indices? one-based indices
-    markdown            ; writing docs for people to ignore
+    (markdown +grip)    ; writing docs for people to ignore
     ;;nim               ; python + lisp at the speed of c
     ;;nix               ; I hereby declare "nix geht mehr!"
     ;;ocaml             ; an objective camel
@@ -687,6 +705,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;purescript        ; javascript, but functional
     (python             ; beautiful is better than ugly
      +lsp
+     +tree-sitter
      +cython
      +poetry
      +pyright)
@@ -696,15 +715,21 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;rest              ; Emacs as a REST client
     ;;rst               ; ReST in peace
     ;;(ruby +rails)     ; 1.step {|i| p "Ruby is #{i.even? ? 'love' : 'life'}"}
-    (rust +lsp)         ; Fe2O3.unwrap().unwrap().unwrap().unwrap()
+    (rust
+     +lsp)              ; Fe2O3.unwrap().unwrap().unwrap().unwrap()
     ;;scala             ; java, but good
     ;;(scheme +guile)   ; a fully conniving family of lisps
-    sh                  ; she sells {ba,z,fi}sh shells on the C xor
+    (sh
+     +powershell
+     +tree-sitter
+     +lsp)              ; she sells {ba,z,fi}sh shells on the C xor
     ;;sml
     ;;solidity          ; do you need a blockchain? No.
     ;;swift             ; who asked for emoji variables?
     ;;terra             ; Earth and Moon in alignment for performance.
-    web                 ; the tubes
+    (web
+     +tree-sitter
+     +lsp)              ; the tubes
     (yaml               ; JSON, but readable
      +lsp)
     ;;zig               ; C, but simpler
@@ -733,6 +758,39 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
 
 ### Visual settings {#visual-settings}
+
+
+#### Frame {#frame}
+
+Configure default size for new Emacs frames. I'm usually at 1440p display size,
+so this seems reasonable.
+
+```emacs-lisp
+(add-to-list 'default-frame-alist '(height . 72))
+(add-to-list 'default-frame-alist '(width . 240))
+```
+
+To make Emacs look a bit more modern (at least on macOS) we can enable a "natural title bar", which makes
+the color of the title bar match the color of the buffer.
+For this to work, Emacs must be compiled using the `--with-natural-title-bar` flag.
+
+Configuring transparent titlebars are supposed to be working by the following code,
+however I'm unable to make it work by only configuring Emacs.
+
+```emacs-lisp
+(when (eq system-type 'darwin)
+  (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
+  (add-to-list 'default-frame-alist '(ns-appearance . light))  ;; or dark
+  (setq ns-use-proxy-icon nil
+        frame-title-format nil))
+```
+
+So by setting some `defaults` in macOS, we achieve the desired result.
+
+```shell
+$ defaults write org.gnu.Emacs HideDocumentIcon YES
+$ defaults write org.gnu.Emacs TransparentTitleBar LIGHT  # or DARK; doesn't really matter when used with "frame-title-format nil"
+```
 
 
 #### Font Faces {#font-faces}
@@ -1234,12 +1292,6 @@ something simple.
   (setq +doom-dashboard-ascii-banner-fn #'doom-dashboard-draw-ascii-emacs-banner-fn))
 ```
 
-<!--list-separator-->
-
--  Frames
-
-    TBD
-
 
 #### End Of Line characters {#end-of-line-characters}
 
@@ -1426,6 +1478,19 @@ The default AHS font faces don't match the theme at all, let's try to fix that!
   `(ahs-definition-face-unfocused       :foreground "White" :background ,(doom-color 'magenta))
   `(ahs-plugin-default-face             :inherit hl-line :foreground ,(doom-color 'fg))
   `(ahs-plugin-default-face-unfocused   :inherit hl-line :foreground ,(doom-color 'magenta)))
+```
+
+
+#### Autothemer {#autothemer}
+
+Nice way to create custom themes
+
+```emacs-lisp
+(package! autothemer)
+```
+
+```emacs-lisp
+(use-package! autothemer)
 ```
 
 
@@ -1633,8 +1698,8 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
 
 ```emacs-lisp
 (after! drag-stuff
-  (global-set-key (kbd "<C-up>") 'drag-stuff-up)
-  (global-set-key (kbd "<C-down>") 'drag-stuff-down))
+  (global-set-key (kbd "<C-up>") #'drag-stuff-up)
+  (global-set-key (kbd "<C-down>") #'drag-stuff-down))
 ```
 
 
@@ -2064,26 +2129,6 @@ Tramp makes accessing remote file systems using Emacs a blast.
 ```
 
 
-#### Tree-sitter {#tree-sitter}
-
-Tree-sitter is a general programming language parser that efficiently builds and updates ASTs (Abstract Syntax Trees)
-for your code.
-Let's give it a spin!
-
-```emacs-lisp
-(package! tree-sitter)
-(package! tree-sitter-langs)
-```
-
-```emacs-lisp
-(use-package! tree-sitter
-  :config
-  (require 'tree-sitter-langs)
-  (global-tree-sitter-mode)
-  (add-hook 'tree-sitter-after-on-hook #'tree-sitter-hl-mode))
-```
-
-
 #### Treemacs {#treemacs}
 
 Make `treemacs` pretty and functional.
@@ -2343,6 +2388,19 @@ The [highlight-indent-guides](https://github.com/DarthFennec/highlight-indent-gu
 ```emacs-lisp
 (add-hook! 'prog-mode-hook #'highlight-indent-guides-mode)
 (setq highlight-indent-guides-method #'character)
+```
+
+
+#### Which function {#which-function}
+
+Which function mode is a global minor mode that displays the current function name.
+I like to put it in the header line (as opposed to the mode-line) since it's easier to see while working.
+
+```emacs-lisp
+;; (add-hook! 'prog-mode-hook #'which-function-mode)
+;; (setq-default which-func-unknown "n/a"
+;;               header-line-format '((which-function-mode ("" which-func-format " "))))
+;; (setq mode-line-misc-info (assq-delete-all 'which-function-mode mode-line-misc-info))
 ```
 
 
@@ -3223,43 +3281,45 @@ sketching or hand written notes and so on.
 
 ### Web/Javascript/Typescript {#web-javascript-typescript}
 
-TODO
-
--   Fix `.editorconfig` should override lsp-formatting
--   Must respect `.eslintrc` and `.prettierrc`
--   `.tsx` files are suuuper slow to load - figure out why!
-
-Don't use LSP formatting for these modes. I usually have a .editorconfig file or something..
+Use prettier for formatting every `web-mode`.
 
 ```emacs-lisp
-;; Enable `sgml-electric-tag-pair-mode' minor mode for web mode!
-(add-hook! 'web-mode-hook #'sgml-electric-tag-pair-mode)
-
-(use-package! web-mode
-  :init
-  (setq-hook! 'javascript-mode-hook +format-with-lsp nil)
-  (setq-hook! 'typescript-mode-hook +format-with-lsp nil)
-  (setq-hook! 'typescript-tsx-mode-hook +format-with-lsp nil)
-  :config
-  (setq web-mode-enable-auto-closing              t
-        web-mode-enable-auto-opening              t
-        web-mode-enable-auto-quoting              t
-        web-mode-enable-auto-expanding            t
-        web-mode-enable-current-element-highlight t
-        web-mode-markup-indent-offset             2
-        web-mode-code-indent-offset               2
-        web-mode-sql-indent-offset                2
-        web-mode-css-indent-offset                2
-        tab-width                                 2
-        evil-shift-width                          2))
+(package! prettier)
 ```
 
-Customize some faces
+```emacs-lisp
+(use-package! prettier
+  :hook (web-mode . prettier-mode))
+```
+
+The `typescript-tsx-mode` is horrendous to use, and it seems like there's not a really good way to
+use Typescript with React in Emacs these days..
+
+-   <https://github.com/emacs-typescript/typescript.el/issues/4>
+-   <https://merrick.luois.me/posts/better-tsx-support-in-doom-emacs#org6f798c0>
+
+<!--listend-->
 
 ```emacs-lisp
-(after! web-mode
-  (custom-set-faces!
-    `(web-mode-current-element-highlight-face :foreground "White" :background ,(doom-color 'magenta))))
+(use-package! typescript-mode
+  :mode ("\\.tsx\\'" . typescript-tsx-tree-sitter-mode)
+  :config
+  (setq typescript-indent-level 2)
+
+  (define-derived-mode typescript-tsx-tree-sitter-mode typescript-mode "TypeScript TSX"
+    (setq-local indent-line-function 'rjsx-indent-line))
+
+  (add-hook! 'typescript-tsx-tree-sitter-mode-local-vars-hook
+             #'+javascript-init-lsp-or-tide-maybe-h
+             #'tree-sitter-hl-mode  ;; not perfect, but an improvement
+             #'rjsx-minor-mode)
+
+  (map! :map typescript-tsx-tree-sitter-mode-map
+        "<" 'rjsx-electric-lt
+        ">" 'rjsx-electric-gt))
+
+(after! tree-sitter
+  (add-to-list 'tree-sitter-major-mode-language-alist '(typescript-tsx-tree-sitter-mode . tsx)))
 ```
 
 
