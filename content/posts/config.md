@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-09-17T15:25:31+02:00
+lastmod = 2022-12-02T11:13:48+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -38,7 +38,7 @@ So a big thanks to `tecosaur` for making my onboarding to Doom Emacs a smooth ex
 
 ## Installing Emacs {#installing-emacs}
 
-Emacs can be installed in many ways. I'm usually on a Mac, so I usually just uses [Homebrew](https://brew.sh/).
+Emacs can be installed in many ways. I'm usually on a Mac, so I just uses [Homebrew](https://brew.sh/).
 There's a couple of Emacs packages in Homebrew, but the most popular seems to be [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) and [emacs-mac](https://github.com/railwaycat/homebrew-emacsmacport).
 I have been using `emacs-plus` for some time, but currently I'm testing out `emacs-mac`.
 
@@ -60,7 +60,7 @@ There is also some pre-built binaries available, but I'm not sure what flags the
 ## Configuration {#configuration}
 
 Remember to run `doom sync` after modifiyng this file.
-Make this file run (slighty) faster with lexical binding (I read it on the internet)
+Make this file run (slighty) faster with lexical binding (I don't know why, but the internet says so).
 
 ```emacs-lisp
 ;;; config.el -*- lexical-binding: t; -*-
@@ -1549,6 +1549,71 @@ and there's no need to use a different face.
   (map! :leader
         (:prefix-map ("s" . "search")
          :desc "Jump to outline" "J" #'consult-outline)))
+```
+
+
+#### DAP {#dap}
+
+> From the `:tools debugger` module
+
+Debugging using `dap-mode` and `lsp` brings us breakpoints, a REPL, local variables view for current stack frames and more
+to Emacs.
+
+I have not used this too much, so it's currently at an experimental stage for my part.
+[Here's](https://youtu.be/0bilcQVSlbM) a link to a Systemcrafters Youtube video tutorial on `dap-mode`.
+
+```emacs-lisp
+(after! dap-mode
+
+  ;; There's a bug which cause the breakpoint fringe to disappear while
+  ;; the debug session is running. This little hook seems to fix it.
+  ;; https://github.com/emacs-lsp/dap-mode/issues/374#issuecomment-1140399819
+  (add-hook! +dap-running-session-mode
+    (set-window-buffer nil (current-buffer)))
+
+  ;; Doesn't really seem to be working, gotta reopen the buffer...
+  (add-hook! dap-terminated-hook (set-window-buffer nil (current-buffer)))
+
+  ;; Windows to be shown when debugging
+  (setq dap-auto-configure-features '(sessions locals breakpoints expressions controls tooltip)))
+```
+
+Doom emacs doesn't provides us with out-of-the-box keybindings for now, but there's an examples in the
+[documentation](https://docs.doomemacs.org/latest/modules/tools/debugger/#keybindings,code-1) for now.
+
+```emacs-lisp
+(map! :map dap-mode-map
+      :leader
+      :prefix ("d" . "dap")
+      ;; basics
+      :desc "dap next"          "n" #'dap-next
+      :desc "dap step in"       "i" #'dap-step-in
+      :desc "dap step out"      "o" #'dap-step-out
+      :desc "dap continue"      "c" #'dap-continue
+      :desc "dap hydra"         "h" #'dap-hydra
+      :desc "dap debug restart" "r" #'dap-debug-restart
+      :desc "dap debug"         "s" #'dap-debug
+      :desc "dap disconnect"    "q" #'dap-disconnect
+
+      ;; debug
+      :prefix ("dd" . "Debug")
+      :desc "dap debug"         "d" #'dap-debug
+      :desc "dap debug recent"  "r" #'dap-debug-recent
+      :desc "dap debug last"    "l" #'dap-debug-last
+
+      ;; eval
+      :prefix ("de" . "Eval")
+      :desc "eval"                "e" #'dap-eval
+      :desc "eval region"         "r" #'dap-eval-region
+      :desc "eval thing at point" "s" #'dap-eval-thing-at-point
+      :desc "add expression"      "a" #'dap-ui-expressions-add
+      :desc "remove expression"   "d" #'dap-ui-expressions-remove
+
+      :prefix ("db" . "Breakpoint")
+      :desc "dap breakpoint toggle"      "b" #'dap-breakpoint-toggle
+      :desc "dap breakpoint condition"   "c" #'dap-breakpoint-condition
+      :desc "dap breakpoint hit count"   "h" #'dap-breakpoint-hit-condition
+      :desc "dap breakpoint log message" "l" #'dap-breakpoint-log-message)
 ```
 
 
@@ -3114,7 +3179,7 @@ sketching or hand written notes and so on.
 
             ;; `org' capture templates
             (setq org-capture-templates
-                  (doct `(("Personal todo" :keys "t"
+                  (doct `(("Todo" :keys "t"
                            :icon ("checklist" :set "octicon" :color "green")
                            :file +org-capture-todo-file
                            :prepend t
@@ -3122,7 +3187,7 @@ sketching or hand written notes and so on.
                            :type entry
                            :template ("* TODO %? %^G"
                                       "%i"))
-                          ("Personal note" :keys "n"
+                          ("Note" :keys "n"
                            :icon ("sticky-note-o" :set "faicon" :color "green")
                            :file +org-capture-todo-file
                            :prepend t
@@ -3242,17 +3307,17 @@ sketching or hand written notes and so on.
                                        :prepend nil
                                        :time-or-todo "TODO"
                                        :heading "Tasks"
-                                       :file +org-capture-central-project-todo-file)
+                                       :file +org-capture-projects-file)
                                       ("Project note"
                                        :keys "n"
                                        :time-or-todo "%U"
                                        :heading "Notes"
-                                       :file +org-capture-central-project-notes-file)
+                                       :file +org-capture-notes-file)
                                       ("Project changelog"
                                        :keys "c"
                                        :time-or-todo "%U"
                                        :heading "Unreleased"
-                                       :file +org-capture-central-project-changelog-file)))
+                                       :file +org-capture-changelog-file)))
                           ))))
 
           (set-org-capture-templates)
@@ -3326,9 +3391,25 @@ use Typescript with React in Emacs these days..
 ### Python {#python}
 
 
+#### Debugging {#debugging}
+
+> DAP expects ptvsd by default as the Python debugger, however debugpy is recommended.
+
+So be sure to install `debugpy`.
+
+```shell
+$ pip3 install debugpy --user
+```
+
+```emacs-lisp
+(after! (python-mode dap-mode)
+  (setq dap-python-debugger 'debugpy))
+```
+
+
 ### Elixir {#elixir}
 
-Install some extra flycheck packages for Elixir
+Install some extra `flycheck` packages for Elixir
 
 ```emacs-lisp
 (package! flycheck-credo)
@@ -3344,6 +3425,7 @@ Install some extra flycheck packages for Elixir
 ```
 
 Enable inline syntax highlighting for `~H` sigils.
+(This doesn't really work very well...)
 
 ```emacs-lisp
 (use-package! polymode
@@ -3363,6 +3445,83 @@ Enable inline syntax highlighting for `~H` sigils.
   (define-polymode poly-elixir-web-mode
     :hostmode 'poly-elixir-hostmode
     :innermodes '(poly-liveview-expr-elixir-innermode)))
+```
+
+
+#### LSP {#lsp}
+
+Configure `lsp-language-id-configuration` for `heex` templates.
+
+```emacs-lisp
+(after! lsp-mode
+  (add-to-list 'lsp-language-id-configuration
+               '(".*\\.[hl]?eex$" . "elixir")))
+```
+
+
+#### Debugging {#debugging}
+
+Debugging templates can be edited by invoking `M-x dap-debug-edit-template`.
+
+TODO - Figure out how to attach debugger to a running IEX session.
+
+To configure Phoenix debugging
+
+-   [elixir-lsp/elixir-ls#451 Debugger fails initialization on demo phoenix project](https://github.com/elixir-lsp/elixir-ls/issues/451)
+-   Remember to set cowboy timeout or else it will timeout
+-   Env variables can be loaded using `load-env-vars` and loading either a `.env` or `.environment` file
+
+<!--listend-->
+
+```emacs-lisp
+(after! (elixir-mode lsp-elixir)
+  ;; (require 'dap-elixir)
+  ;; (defun dap-elixir--populate-start-file-args (conf)
+  ;;   "Populate CONF with the required arguments."
+  ;;   (-> conf
+  ;;       (dap--put-if-absent :dap-server-path '("debugger.sh"))
+  ;;       (dap--put-if-absent :type "mix_task")
+  ;;       (dap--put-if-absent :name "mix test")
+  ;;       (dap--put-if-absent :request "launch")
+  ;;       ;; (dap--put-if-absent :task "test")
+  ;;       ;; (dap--put-if-absent :taskArgs (list "--trace"))
+  ;;       (dap--put-if-absent :projectDir (lsp-find-session-folder (lsp-session) (buffer-file-name)))
+  ;;       (dap--put-if-absent :cwd (lsp-find-session-folder (lsp-session) (buffer-file-name)))
+  ;;       ;; (dap--put-if-absent :requireFiles (list
+  ;;       ;;                                    "test/**/test_helper.exs"
+  ;;       ;;                                    "test/**/*_test.exs"))
+  ;;       ))
+
+  (dap-register-debug-template "Elixir Run Configuration"
+                               (list :type "Elixir"
+                                     :name "Elixir::Run"
+                                     :request "launch"
+                                     :task "test"
+                                     ;; :command "iex"
+                                     :taskArgs (list "--trace")
+                                     :requiredFiles (list
+                                           "test/**/test_helper.exs"
+                                           "test/**/*_test.exs")
+                                     :dap-server-path (list (concat (file-name-as-directory lsp-elixir-ls-server-dir) "debugger.sh"))))
+
+  (dap-register-debug-template "Elixir Phoenix Server"
+                               (list :type "Elixir"
+                                     :name "Elixir::Phoenix Server"
+                                     :request "launch"
+                                     :task "phx.server"
+                                     :dap-server-path (list (concat (file-name-as-directory lsp-elixir-ls-server-dir) "debugger.sh"))))
+
+  (dap-register-debug-template "Elixir Test Suite"
+                               (list :name "Elixir::Test Suite"
+                                     :type "Elixir"
+                                     :request "launch"
+                                     :task "test"
+                                     :taskArgs (list "--trace")
+                                     :requiredFiles (list
+                                           "test/**/test_helper.exs"
+                                           "test/**/*_test.exs")
+                                     :dap-server-path (list (concat (file-name-as-directory lsp-elixir-ls-server-dir) "debugger.sh"))))
+  )
 ```
 
 
