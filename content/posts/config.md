@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-12-25T00:03:50+01:00
+lastmod = 2022-12-25T00:39:55+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -1536,7 +1536,7 @@ Auto-complete, yay!
 
 ```emacs-lisp
 (after! company
-  (setq company-idle-delay 0.5
+  (setq company-idle-delay 0.1
         company-minimum-prefix-length 2
         company-show-numbers t
         company-box-doc-enable nil)
@@ -1852,12 +1852,20 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (setq evil-respect-visual-line-mode t)
 
       (evil-global-set-key 'normal "Q" #'evil-execute-q-macro)
-      (define-key evil-normal-state-map (kbd "C-S-u") #'evil-scroll-other-window-interactive)
-      (define-key evil-normal-state-map (kbd "C-S-d") #'evil-scroll-other-window-down-interactive)
+      (define-key evil-normal-state-map (kbd "C-S-u")     #'evil-scroll-other-window-interactive)
+      (define-key evil-normal-state-map (kbd "C-S-d")     #'evil-scroll-other-window-down-interactive)
+
+      ;; Make TAB'ing a bit more intuitive
+      (define-key evil-insert-state-map (kbd "<tab>")     #'evil-shift-right-line)
+      (define-key evil-insert-state-map (kbd "<backtab>") #'evil-shift-left-line)
+      (define-key evil-motion-state-map (kbd "<tab>")     #'evil-shift-right-line)
+      (define-key evil-motion-state-map (kbd "<backtab>") #'evil-shift-left-line)
+
       (evil-define-key '(normal visual motion) 'global
         "H"  #'evil-first-non-blank
         "L"  #'evil-end-of-line-interactive
         "0"  #'evil-jump-item)
+
 
       (advice-add 'evil-ex-search-next     :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-ex-search-previous :after #'evil-scroll-to-center-advice)
