@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-12-02T11:13:48+01:00
+lastmod = 2022-12-25T00:03:50+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -51,7 +51,7 @@ Installation instructions are in the [README](https://github.com/railwaycat/home
 
 ```shell
 $ brew tap railwaycat/emacsmacport
-$ brew install emacs-mac --with-natural-title-bar --with-native-comp --with-xwidgets --with-librsvg --with-imagemagick --with-modern-icon
+$ brew install emacs-mac --with-natural-title-bar --with-native-comp --with-xwidgets --with-librsvg --with-imagemagick --with-emacs-big-sur-icon
 ```
 
 There is also some pre-built binaries available, but I'm not sure what flags they are compiled with.
@@ -157,6 +157,29 @@ Then, we'll pull up a buffer prompt.
           :n "C--"          #'text-scale-decrease   ; Decrease buffer font
           :n "C-0"          #'doom/reset-font-size) ; Reset all font sizes
     ```
+
+<!--list-separator-->
+
+-  Buffer manipulation
+
+    <!--list-separator-->
+
+    -  Uniquify buffer functions
+
+        ```emacs-lisp
+        (defun uniquify-region-lines (beg end)
+          "Remove duplicate adjacent lines in region."
+          (interactive "*r")
+          (save-excursion
+            (goto-char beg)
+            (while (re-search-forward "^\\(.*\n\\)\\1+" end t)
+              (replace-match "\\1"))))
+
+        (defun uniquify-buffer-lines ()
+          "Remove duplicate adjacent lines in the current buffer."
+          (interactive)
+          (uniquify-region-lines (point-min) (point-max)))
+        ```
 
 
 #### Hacks {#hacks}
@@ -503,6 +526,17 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
 <!--list-separator-->
 
+-  Unpinned core packages
+
+    In some cases we want to install the latest and greatest version of a package. Doom allows us to unpin packages
+    using the `unpin` macro.
+
+    ```emacs-lisp
+    ;; (unpin! tree-sitter)  ;; NOTE Didn't fix "ABI too new..." error. No reason to unpin
+    ```
+
+<!--list-separator-->
+
 -  Structure
 
     <a id="code-snippet--doom-config"></a>
@@ -576,7 +610,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     (dired +icons)      ; making dired pretty [functional]
     electric            ; smarter, keyword-based electric-indent
     (ibuffer +icons)    ; interactive buffer management
-    (undo +tree)        ; persistent, smarter undo for your inevitable mistakes
+    (undo)              ; persistent, smarter undo for your inevitable mistakes
     vc                  ; version-control and Emacs, sitting in a tree
     ```
 
@@ -617,7 +651,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     make                ; run make tasks from Emacs
     ;;pass              ; password manager for nerds
     pdf                 ; pdf enhancements
-    prodigy             ; FIXME managing external services & code builders
+    ;;prodigy           ; FIXME managing external services & code builders
     ;;rgb               ; creating color strings
     ;;taskrunner        ; taskrunner for all your projects
     ;;terraform         ; infrastructure as code
@@ -1636,6 +1670,7 @@ Add some extra configuration options for the `dired` file manager.
 
 (use-package! dired
   :config
+  (require 'evil-collection)
   (map! :leader :desc "Dired" "-" #'dired-jump)         ;; easy access shortcut
   (map! :map dired-recent-mode-map "C-x C-d" nil)       ;; hijacks `counsult-dir' command
   (evil-collection-define-key 'normal 'dired-mode-map
@@ -3422,29 +3457,6 @@ Install some extra `flycheck` packages for Elixir
   (flycheck-credo-setup)
   (flycheck-dialyxir-setup)
   (flycheck-add-next-checker 'lsp-ui 'elixir-credo))
-```
-
-Enable inline syntax highlighting for `~H` sigils.
-(This doesn't really work very well...)
-
-```emacs-lisp
-(use-package! polymode
-  :init (setq web-mode-engines-alist '(("elixir" . "\\.ex\\'")))
-  ;; :hook (elixir-mode . poly-elixir-web-mode)         ;; messes up rest of elixir-mode - enable manually for now!
-  :config
-  (define-hostmode poly-elixir-hostmode :mode 'elixir-mode)
-  (define-innermode poly-liveview-expr-elixir-innermode
-    :mode 'web-mode
-    :head-matcher (rx line-start (* space) "~H" (= 3 (char "\"'")) line-end)
-    :tail-matcher (rx line-start (* space) (= 3 (char "\"'")) line-end)
-    :head-mode 'host
-    :tail-mode 'host
-    :allow-nested nil
-    :keep-in-mode 'host
-    :fallback-mode 'host)
-  (define-polymode poly-elixir-web-mode
-    :hostmode 'poly-elixir-hostmode
-    :innermodes '(poly-liveview-expr-elixir-innermode)))
 ```
 
 
