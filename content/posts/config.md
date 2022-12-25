@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-12-25T00:39:55+01:00
+lastmod = 2022-12-25T01:03:47+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -1839,6 +1839,20 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       "Wrap `scroll-other-window-down' in interactive."
       (interactive)
       (scroll-other-window))
+
+    (defun cust/evil-visual-shift-right ()
+      "Wrap `evil-shift-right' in interactive and keeps visual mode"
+      (interactive)
+      (call-interactively 'evil-shift-right)
+      (evil-normal-state)
+      (evil-visual-restore))
+
+    (defun cust/evil-visual-shift-left ()
+      "Wrap `evil-shift-left' in interactive and keeps visual mode"
+      (interactive)
+      (call-interactively 'evil-shift-left)
+      (evil-normal-state)
+      (evil-visual-restore))
     ```
 
 <!--list-separator-->
@@ -1856,10 +1870,11 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (define-key evil-normal-state-map (kbd "C-S-d")     #'evil-scroll-other-window-down-interactive)
 
       ;; Make TAB'ing a bit more intuitive
-      (define-key evil-insert-state-map (kbd "<tab>")     #'evil-shift-right-line)
-      (define-key evil-insert-state-map (kbd "<backtab>") #'evil-shift-left-line)
-      (define-key evil-motion-state-map (kbd "<tab>")     #'evil-shift-right-line)
-      (define-key evil-motion-state-map (kbd "<backtab>") #'evil-shift-left-line)
+      (define-key evil-visual-state-map (kbd "<tab>")     #'cust/evil-visual-shift-right)
+      (define-key evil-visual-state-map (kbd "<backtab>") #'cust/evil-visual-shift-left)
+      (evil-define-key '(insert motion) 'global
+        (kbd "<tab>")      #'evil-shift-right-line
+        (kbd "<backtab>")  #'evil-shift-left-line)
 
       (evil-define-key '(normal visual motion) 'global
         "H"  #'evil-first-non-blank
