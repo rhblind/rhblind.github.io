@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2022-12-25T01:03:47+01:00
+lastmod = 2023-01-02T09:10:02+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -1869,7 +1869,7 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (define-key evil-normal-state-map (kbd "C-S-u")     #'evil-scroll-other-window-interactive)
       (define-key evil-normal-state-map (kbd "C-S-d")     #'evil-scroll-other-window-down-interactive)
 
-      ;; Make TAB'ing a bit more intuitive
+      ;; Use TAB and S-TAB for 'evil-shift' left and right
       (define-key evil-visual-state-map (kbd "<tab>")     #'cust/evil-visual-shift-right)
       (define-key evil-visual-state-map (kbd "<backtab>") #'cust/evil-visual-shift-left)
       (evil-define-key '(insert motion) 'global
