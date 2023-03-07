@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2023-01-02T09:10:02+01:00
+lastmod = 2023-03-07T07:58:23+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -55,6 +55,15 @@ $ brew install emacs-mac --with-natural-title-bar --with-native-comp --with-xwid
 ```
 
 There is also some pre-built binaries available, but I'm not sure what flags they are compiled with.
+
+
+### Emacs-plus {#emacs-plus}
+
+The [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) is another Homebrew formula for installing Emacs on macOS.
+
+```shell
+$ brew install emacs-plus@28 --with-modern-papirus-icon --with-debug --with-xwidgets --with-native-comp
+```
 
 
 ## Configuration {#configuration}
@@ -152,10 +161,25 @@ Then, we'll pull up a buffer prompt.
 
 -  Text scaling
 
+    The `default-text-scale` package works by adjusting the size of the `default` face,
+    so that it affects all buffers at once.
+
     ```emacs-lisp
-    (map! :n "C-+"          #'text-scale-increase   ; Increase buffer font
-          :n "C--"          #'text-scale-decrease   ; Decrease buffer font
-          :n "C-0"          #'doom/reset-font-size) ; Reset all font sizes
+    (package! default-text-scale)
+    ```
+
+    Enable the global minor mode and add some extra keybindings for macOS. I think
+    it's easier to just use `CMD-+/-/0` to increase, decrease and reset.
+
+    ```emacs-lisp
+    (default-text-scale-mode 1)
+    (map! :map default-text-scale-mode-map
+          (:when (eq system-type 'darwin)
+            "s-+"     #'default-text-scale-increase
+            "s--"     #'default-text-scale-decrease
+            "s-0"     #'default-text-scale-reset)
+          (:when (and (modulep! :ui workspaces) (eq system-type 'darwin)
+                      (define-key evil-normal-state-map (kbd "s-0") nil))))
     ```
 
 <!--list-separator-->
@@ -458,6 +482,21 @@ staving off the collector while I'm working.
 ```
 
 
+#### Benchmarking {#benchmarking}
+
+Testing out `benchmark-init` to benchmark Emacs performance.
+
+```emacs-lisp
+;;(package! benchmark-init)
+```
+
+```emacs-lisp
+;; (when init-file-debug
+;;   (require 'benchmark-init)
+;;   (add-hook 'doom-first-input-hook #'benchmark-init/deactivate))
+```
+
+
 #### Load prefer newer {#load-prefer-newer}
 
 Sometimes it's necessary to fix a bug, or otherwise change stuff in installed local packages.
@@ -532,7 +571,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     using the `unpin` macro.
 
     ```emacs-lisp
-    ;; (unpin! tree-sitter)  ;; NOTE Didn't fix "ABI too new..." error. No reason to unpin
+    ;; (unpin! elixir)
     ```
 
 <!--list-separator-->
@@ -732,7 +771,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
      +pandoc            ; export-with-pandoc support
      +gnuplot           ; who doesn't like pretty pictures
      ;;+pomodoro        ; be fruitful with the tomato technique
-     +present           ; using org-mode for presentations
+     ;;+present         ; using org-mode for presentations
      +roam2)            ; wander around notes
     ;;php               ; perl's insecure younger brother
     ;;plantuml          ; diagrams for confusing people more
@@ -958,7 +997,7 @@ Because we care about how things look let’s add a check to make sure we’re t
 
 <a id="code-snippet--detect-missing-fonts"></a>
 ```emacs-lisp
-(defvar required-fonts '("JetBrainsMono.*" "Overpass" "JuliaMono" "IBM Plex Mono" "Merriweather" "Alegreya"))
+(defvar required-fonts '("JetBrainsMono.*" "Overpass" "JuliaMono" "IBM Plex Mono" "Merriweather" "Alegreya" "Iosevka Aile"))
 (defvar available-fonts
   (delete-dups (or (font-family-list)
                    (split-string (shell-command-to-string "fc-list : family")
@@ -1075,9 +1114,6 @@ Thankfully, it isn't to hard to add these to the `composition-function-table`.
 ;; (set-char-table-range composition-function-table ?f '(["\\(?:ff?[fijlt]\\)" 0 font-shape-gstring]))
 ;; (set-char-table-range composition-function-table ?T '(["\\(?:Th\\)" 0 font-shape-gstring]))
 ```
-
-
-#### Helper macros {#helper-macros}
 
 
 ### Other things {#other-things}
@@ -1515,7 +1551,7 @@ The default AHS font faces don't match the theme at all, let's try to fix that!
 ```
 
 
-#### Autothemer {#autothemer}
+#### Auto themer {#auto-themer}
 
 Nice way to create custom themes
 
@@ -1536,8 +1572,7 @@ Auto-complete, yay!
 
 ```emacs-lisp
 (after! company
-  (setq company-idle-delay 0.1
-        company-minimum-prefix-length 2
+  (setq company-idle-delay 0.2
         company-show-numbers t
         company-box-doc-enable nil)
 
@@ -1551,17 +1586,12 @@ Improvements from `precedent` are mostly from history, let's improve its memory.
               prescient-history-length 1000)
 ```
 
-Ispell is nice, let’s have it in text, markdown, and GFM.
+Ispell is nice, lets have it in text, markdown, and GFM.
 
 ```emacs-lisp
 (set-company-backend!
-  '(text-mode
-    markdown-mode
-    gfm-mode)
-  '(:seperate
-    company-ispell
-    company-files
-    company-yasnippet))
+  '(text-mode markdown-mode gfm-mode)
+  '(:seperate company-ispell company-files company-yasnippet))
 ```
 
 We configure [Ispell](#ispell) below
@@ -1682,7 +1712,7 @@ Add some extra configuration options for the `dired` file manager.
 ```
 
 The `dired-open` can help us making sure that various files are opened in the correct program. For example,
-opening a video file in Emacs is probably not going to be a pleasent experience, and would be better to open
+opening a video file in Emacs is probably not going to be a pleasant experience, and would be better to open
 in for example Quicktime or, VLC.
 On Linux (or XDG enabled environments), the `dired-open` package has a concept of "auto-detecting" which program that should be used to open certain files. I'm mostly using macOS, which does not support XDG very well.
 So, we'll try to write a the `dired-open-macos` function to use the native `open` program instead.
@@ -1870,11 +1900,12 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (define-key evil-normal-state-map (kbd "C-S-d")     #'evil-scroll-other-window-down-interactive)
 
       ;; Use TAB and S-TAB for 'evil-shift' left and right
-      (define-key evil-visual-state-map (kbd "<tab>")     #'cust/evil-visual-shift-right)
-      (define-key evil-visual-state-map (kbd "<backtab>") #'cust/evil-visual-shift-left)
-      (evil-define-key '(insert motion) 'global
-        (kbd "<tab>")      #'evil-shift-right-line
-        (kbd "<backtab>")  #'evil-shift-left-line)
+      ;; NOTE - this messes up e.g. vterm and other TAB stuff
+      ;; (define-key evil-visual-state-map (kbd "<tab>")     #'cust/evil-visual-shift-right)
+      ;; (define-key evil-visual-state-map (kbd "<backtab>") #'cust/evil-visual-shift-left)
+      ;; (evil-define-key '(insert motion) 'global
+      ;;   (kbd "<tab>")      #'evil-shift-right-line
+      ;;   (kbd "<backtab>")  #'evil-shift-left-line)
 
       (evil-define-key '(normal visual motion) 'global
         "H"  #'evil-first-non-blank
@@ -1911,19 +1942,6 @@ configure `lsp-origami` to use for code folding with `lsp-mode`.
 ```emacs-lisp
 (use-package! lsp-origami
   :hook (lsp-after-open-hook . #'lsp-origami-try-enable))
-```
-
-
-#### Forge {#forge}
-
-> From the `:tools magit` module
-
-Add custom hosts
-
-```emacs-lisp
-(after! forge
-  (setq gitlab.user "user")
-  (add-to-list 'forge-alist '("gitlab.intility.com" "gitlab.intility.com/api/v4" "gitlab.intility.com" forge-gitlab-repository)))
 ```
 
 
@@ -2035,86 +2053,107 @@ Default keybindings for this package is:
 -   `C-c l l` - Insert lists
 
 
-#### Magit {#magit}
+#### Version Control System {#version-control-system}
 
-> From the `:tools magit` module
+<!--list-separator-->
 
-Making `magit` a tad prettier.
-(Taken from the [Modern Emacs](http://www.modernemacs.com/#spacemacs) blog)
+-  Magit
 
-```emacs-lisp
-(after! magit
-  (defvar pretty-magit--alist nil
-    "An alist of regexes, an icon, and face properties to apply to icon.")
+    > From the `:tools magit` module
 
-  (defvar pretty-magit--prompt nil
-    "A list of commit leader prompt candidates.")
+    Making `magit` a tad prettier.
+    (Taken from the [Modern Emacs](http://www.modernemacs.com/#spacemacs) blog)
 
-  (defvar pretty-magit--use-commit-prompt? nil
-    "Do we need to use the magit commit prompt?")
+    ```emacs-lisp
+    (after! magit
+      (defvar pretty-magit--alist nil
+        "An alist of regexes, an icon, and face properties to apply to icon.")
 
-  (defun pretty-magit--add-magit-faces ()
-    "Add face properties and compose symbols for buffer from pretty-magit."
-    (interactive)
-    (with-silent-modifications
-      (-each pretty-magit--alist
-        (-lambda ((rgx char face-props))
-          (save-excursion
-            (goto-char (point-min))
-            (while (re-search-forward rgx nil t)
-              (-let [(start end) (match-data 1)]
-                (compose-region start end char)
-                (when face-props
-                  (add-face-text-property start end face-props)))))))))
+      (defvar pretty-magit--prompt nil
+        "A list of commit leader prompt candidates.")
 
-  (defun pretty-magit-add-leader (word char face-props)
-    "Replace sanitized WORD with CHAR having FACE-PROPS and add to prompts."
-    (add-to-list 'pretty-magit--alist
-                 (list (rx-to-string `(: bow
-                                       (group ,word ":")))
-                       char face-props))
-    (add-to-list 'pretty-magit--prompt
-                 (concat word ": ")))
+      (defvar pretty-magit--use-commit-prompt? nil
+        "Do we need to use the magit commit prompt?")
 
-  (defun pretty-magit-add-leaders (leaders)
-    "Map `pretty-magit-add-leader' over LEADERS."
-    (-each leaders
-      (-applify #'pretty-magit-add-leader)))
+      (defun pretty-magit--add-magit-faces ()
+        "Add face properties and compose symbols for buffer from pretty-magit."
+        (interactive)
+        (with-silent-modifications
+          (-each pretty-magit--alist
+            (-lambda ((rgx char face-props))
+              (save-excursion
+                (goto-char (point-min))
+                (while (re-search-forward rgx nil t)
+                  (-let [(start end) (match-data 1)]
+                    (compose-region start end char)
+                    (when face-props
+                      (add-face-text-property start end face-props)))))))))
 
-  (defun pretty-magit--use-commit-prompt (&rest args)
-    (setq pretty-magit--use-commit-prompt? t))
+      (defun pretty-magit-add-leader (word char face-props)
+        "Replace sanitized WORD with CHAR having FACE-PROPS and add to prompts."
+        (add-to-list 'pretty-magit--alist
+                     (list (rx-to-string `(: bow
+                                           (group ,word ":")))
+                           char face-props))
+        (add-to-list 'pretty-magit--prompt
+                     (concat word ": ")))
 
-  (defun pretty-magit-commit-prompt ()
-    "Magit prompt and insert commit header with faces."
-    (interactive)
-    (when (and pretty-magit--use-commit-prompt?
-               pretty-magit--prompt)
-      (setq pretty-magit--use-commit-prompt? nil)
-      (insert (completing-read "Commit Type " pretty-magit--prompt nil 'confirm))
-      (pretty-magit--add-magit-faces)
-      (evil-insert 1)))
+      (defun pretty-magit-add-leaders (leaders)
+        "Map `pretty-magit-add-leader' over LEADERS."
+        (-each leaders
+          (-applify #'pretty-magit-add-leader)))
 
-  (defun pretty-magit-setup (&optional no-commit-prompts?)
-    "Advise the appropriate magit funcs to add pretty-magit faces."
-    (advice-add 'magit-status         :after 'pretty-magit--add-magit-faces)
-    (advice-add 'magit-refresh-buffer :after 'pretty-magit--add-magit-faces)
+      (defun pretty-magit--use-commit-prompt (&rest args)
+        (setq pretty-magit--use-commit-prompt? t))
 
-    (unless no-commit-prompts?
-      (remove-hook 'git-commit-setup-hook 'with-editor-usage-message)
-      (add-hook    'git-commit-setup-hook 'pretty-magit-commit-prompt)
+      (defun pretty-magit-commit-prompt ()
+        "Magit prompt and insert commit header with faces."
+        (interactive)
+        (when (and pretty-magit--use-commit-prompt?
+                   pretty-magit--prompt)
+          (setq pretty-magit--use-commit-prompt? nil)
+          (insert (completing-read "Commit Type " pretty-magit--prompt nil 'confirm))
+          (pretty-magit--add-magit-faces)
+          (evil-insert 1)))
 
-      (advice-add 'magit-commit-create :after 'pretty-magit--use-commit-prompt))))
-```
+      (defun pretty-magit-setup (&optional no-commit-prompts?)
+        "Advise the appropriate magit funcs to add pretty-magit faces."
+        (advice-add 'magit-status         :after 'pretty-magit--add-magit-faces)
+        (advice-add 'magit-refresh-buffer :after 'pretty-magit--add-magit-faces)
 
-```emacs-lisp
-(after! magit
-  (pretty-magit-add-leaders '(("feature" ? (:foreground "slate gray" :height 1.2))
-                              ("add"     ? (:foreground "#375E97" :height 1.2))
-                              ("fix"     ? (:foreground "#FB6542" :height 1.2))
-                              ("clean"   ? (:foreground "#FFBB00" :height 1.2))
-                              ("docs"    ? (:foreground "#3F681C" :height 1.2))))
-  (pretty-magit-setup))
-```
+        (unless no-commit-prompts?
+          (remove-hook 'git-commit-setup-hook 'with-editor-usage-message)
+          (add-hook    'git-commit-setup-hook 'pretty-magit-commit-prompt)
+
+          (advice-add 'magit-commit-create :after 'pretty-magit--use-commit-prompt))))
+    ```
+
+    ```emacs-lisp
+    (after! magit
+      (pretty-magit-add-leaders '(("feature" ? (:foreground "slate gray" :height 1.2))
+                                  ("add"     ? (:foreground "#375E97" :height 1.2))
+                                  ("fix"     ? (:foreground "#FB6542" :height 1.2))
+                                  ("clean"   ? (:foreground "#FFBB00" :height 1.2))
+                                  ("docs"    ? (:foreground "#3F681C" :height 1.2))))
+      (pretty-magit-setup))
+    ```
+
+<!--list-separator-->
+
+-  Custom Remotes
+
+    ```emacs-lisp
+
+    ;;; Forge
+
+    (after! forge
+      (setq gitlab.user "user")
+      (add-to-list 'forge-alist '("gitlab.intility.com" "gitlab.intility.com/api/v4" "gitlab.intility.com" forge-gitlab-repository)))
+
+    ;;; Browse remotes
+    (require 'browse-at-remote)
+    (add-to-list 'browse-at-remote-remote-type-regexps '("^gitlab\\.intility\\.com$" . "gitlab"))
+    ```
 
 
 #### Marginalia {#marginalia}
@@ -2258,17 +2297,25 @@ Make `treemacs` pretty and functional.
 
 ```emacs-lisp
 (after! (treemacs winum)
-  (setq doom-themes-treemacs-theme "doom-colors")       ; Enable nice colors for treemacs
-  (setq doom-themes-treemacs-enable-variable-pitch nil) ; Don't use variable-pitch font
+  (setq doom-themes-treemacs-theme "doom-colors"        ; Enable nice colors for treemacs
+        doom-themes-treemacs-enable-variable-pitch nil) ; Don't use variable-pitch font
+
   (setq winum-ignored-buffers-regexp
         (delete (regexp-quote (format "%sFramebuffer-" treemacs--buffer-name-prefix))
                 winum-ignored-buffers-regexp))
+
+  ;; This PR cause treemacs to appear on the bottom instead of on the left/right hand side
+  ;; https://github.com/Alexander-Miller/treemacs/pull/971
+  ;; Workaround:
+  (set-popup-rule! "^ \\*Treemacs"
+    :side treemacs-position
+    :width treemacs-width)
 
   (treemacs-project-follow-mode t)
   (treemacs-follow-mode t))
 ```
 
-LSP-Treemacs is an integration package between `lsp-mode` and `treemacs`. It's nice :)
+`lsp-treemacs` integrates `treemacs` with `lsp-mode`.
 
 ```emacs-lisp
 (after! (treemacs lsp-mode)
@@ -2420,7 +2467,7 @@ To use this we'll just hook into `Info`.
 ```
 
 
-#### Writeroom {#writeroom}
+#### Writeroom / Zen mode {#writeroom-zen-mode}
 
 > From the `:ui zen` module.
 
@@ -2543,6 +2590,14 @@ For some file types, we overwrite defaults in the snippets directory, others nee
 ;; (set-file-template! "\\.tex$" :trigger "__" :mode 'latex-mode)
 (set-file-template! "\\.org$" :trigger "__" :mode 'org-mode)
 (set-file-template! "/LICEN[CS]E$" :trigger '+file-templates/insert-license)
+```
+
+
+#### LSP {#lsp}
+
+```emacs-lisp
+(after! lsp-mode
+  (setq lsp-response-timeout 10))
 ```
 
 
@@ -2699,6 +2754,124 @@ $ hugo new site ~/Dropbox/org/hugo-blog
 ```
 
 
+#### Present {#present}
+
+This package let's us create "Systemcrafters-like" presentations from within `org-mode`.
+
+```emacs-lisp
+(package! org-present)
+```
+
+TODO - Make this a local mode like we did with [Writeroom / Zen mode](#writeroom-zen-mode) mode
+
+```emacs-lisp
+;; (use-package! org-present
+;;   :hook ((org-present-mode-hook . #'cust/org-present-start)
+;;          (org-present-mode-quit-hook . #'cust/org-present-end)
+;;          (org-present-after-navigate-functions . #'cust/org-present-prepare-slide))
+;;   :config
+;;   (defvar cust/present-fixed-width-font "JetBrains Mono"
+;;     "The font to use for monospaced (fixed width) text.")
+;;   (defvar cust/present-variable-width-font "Iosevka Aile"
+;;     "The font to use for variable-pitch (document) text.")
+
+;;   ;; Tweak theses faces so they look pretty!
+;;   (set-face-attribute 'default nil :font cust/present-fixed-width-font :weight 'light :height 180)
+;;   (set-face-attribute 'fixed-pitch nil :font cust/present-fixed-width-font :weight 'light :height 190)
+;;   (set-face-attribute 'variable-pitch nil :font cust/present-variable-width-font :weight 'light :height 1.3)
+
+;;   ;;; Org Mode appearance
+
+;;   ;; Load org-faces to make sure we can set appropriate faces
+;;   (require 'org-faces)
+
+;;   ;; Hide emphasis markers on formatted text
+;;   (setq org-hide-emphasis-markers t)
+
+;;   ;; Resize Org headings
+;;   (dolist (face '((org-level-1 . 1.2)
+;;                   (org-level-2 . 1.1)
+;;                   (org-level-3 . 1.05)
+;;                   (org-level-4 . 1.0)
+;;                   (org-level-5 . 1.1)
+;;                   (org-level-6 . 1.1)
+;;                   (org-level-7 . 1.1)
+;;                   (org-level-8 . 1.1)))
+;;     (set-face-attribute (car face) nil :font cust/present-variable-width-font :weight 'medium :height (cdr face)))
+
+;;   ;; Ensure certain Org faces use the fixed-pitch face when variable-pitch mode is on
+;;   (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+;;   (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
+;;   (set-face-attribute 'org-formula nil :inherit 'fixed-pitch)
+;;   (set-face-attribute 'org-code nil :inherit '(shadow fixed-pitch))
+;;   (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
+;;   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
+;;   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
+;;   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
+
+;;   ;;; Centering Org Documents
+
+;;   (setq visual-fill-column-width 110
+;;         visual-fill-column-center-text t)
+
+;;   ;;; Org Present
+
+;;   (defun cust/org-present-prepare-slide (buffer-name heading)
+;;     ;; Show only top-level headlines
+;;     (org-overview)
+
+;;     ;; Unfold the current entry
+;;     (org-show-entry)
+
+;;     ;; Show only direct subheadings of the slide, but don't expand them
+;;     (org-show-children))
+
+;;   (defun cust/org-present-start ()
+;;     ;; Tweak font sizes
+;;     (setq-local face-remapping-alist '((default (:height 1.5) variable-pitch)
+;;                                        (header-line (:height 4.0) variable-pitch)
+;;                                        (org-document-title (:height 1.75) org-document-title)
+;;                                        (org-code (:height 1.55) org-code)
+;;                                        (org-verbatim (:height 1.55) org-verbatim)
+;;                                        (org-block (:height 1.25) org-block)
+;;                                        (org-block-begin-line (:height 0.7) org-block)))
+
+;;     ;; Set a blank header line string to create a blank space at the top
+;;     (setq header-line-format " ")
+
+;;     ;; Display inline images automatically
+;;     (org-display-inline-images)
+
+;;     ;; Center the presentation and wrap lines
+;;     (visual-fill-column-mode 1)
+;;     (visual-line-mode 1))
+
+;;   (defun cust/org-present-end ()
+;;     ;; Reset font customizations
+;;     (setq-local face-remapping-alist '((default variable-pitch default)))
+
+;;     ;; Clear the header line string so that it isn't displayed
+;;     (setq header-line-format nil)
+
+;;     ;; Stop displaying inline images
+;;     (org-remove-inline-images)
+
+;;     ;; Stop centering the document
+;;     (visual-fill-column-mode 0)
+;;     (visual-line-mode 0))
+
+;;   ;; Turn on variable pitch fonts for Org Mode buffers
+;;   ;; (add-hook! 'org-mode-hook #'variable-pitch-mode)
+
+;;   ;;; Register hooks with org-present
+
+;;   ;; (add-hook! 'org-present-mode-hook #'cust/org-present-start)
+;;   ;; (add-hook! 'org-present-mode-quit-hook #'cust/org-present-end)
+;;   ;; (add-hook! 'org-present-after-navigate-functions #'cust/org-present-prepare-slide)
+;;   )
+```
+
+
 #### Roam {#roam}
 
 > From the `:lang org +roam` module
@@ -2720,27 +2893,6 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
 ```emacs-lisp
 (after! (org org-roam)
   (setq org-agenda-text-search-extra-files (org-roam--list-files org-roam-directory)))
-```
-
-
-#### Krita {#krita}
-
-Krita is a wonderful digital painting program which also can be made available in org-mode for doing quick
-sketching or hand written notes and so on.
-
-```emacs-lisp
-(package! org-krita
-  :recipe (:host github
-           :repo "lepisma/org-krita"
-           :files ("resources" "resources" "*.el" "*.el")))
-```
-
-```emacs-lisp
-(use-package! org-krita
-  :config
-  (add-hook 'org-mode-hook 'org-krita-mode)
-  (when (eq system-type 'darwin)
-    (setq org-krita-executable "/Applications/krita.app/Contents/MacOS/krita")))
 ```
 
 
@@ -3319,23 +3471,24 @@ sketching or hand written notes and so on.
                            :icon ("repo" :set "octicon" :color "purple")
                            :prepend t
                            :type entry
-                           :headline "Inbox"
                            :template ("* %{time-or-todo} %?"
-                                      "%i"
-                                      "%a")
+                                      "%i")
                            :file ""
                            :custom (:time-or-todo "")
                            :children (("Project-local todo" :keys "t"
                                        :icon ("checklist" :set "octicon" :color "green")
                                        :time-or-todo "TODO"
+                                       :headline "TODO"
                                        :file +org-capture-project-todo-file)
                                       ("Project-local note" :keys "n"
                                        :icon ("sticky-note" :set "faicon" :color "yellow")
                                        :time-or-todo "%U"
+                                       :headline "Notes"
                                        :file +org-capture-project-notes-file)
                                       ("Project-local changelog" :keys "c"
                                        :icon ("list" :set "faicon" :color "blue")
-                                       :time-or-todo "%U"
+                                       :time-or-todo "%t"
+                                       :headline "Changelog"
                                        :heading "Unreleased"
                                        :file +org-capture-project-changelog-file)))
                           ("Blog" :keys "b"
@@ -3449,6 +3602,27 @@ use Typescript with React in Emacs these days..
 ### Python {#python}
 
 
+#### LSP Python {#lsp-python}
+
+Add some extra `ignored-directories` for LSP.
+
+```emacs-lisp
+(after! (python lsp-mode)
+  (add-to-list 'lsp-file-watch-ignored-directories "[/\\\\]\\.eggs\\'")
+  (add-to-list 'lsp-file-watch-ignored-directories "[/\\\\]\\build\\'")
+
+  ;; Make sure pyright can find the virtualenv
+  ;; (add-hook 'pyvenv-post-activate-hooks (lambda ()
+  ;;                                         (when (modulep! :lang python +pyright)
+  ;;                                           (setq lsp-pyright-venv-path pyvenv-virtual-env))))
+  )
+```
+
+Also, check out [this](https://emacs-lsp.github.io/lsp-mode/page/performance/) handy guide for extra performance tips!
+It's recommended to use `plist` for deserialization. In order to achieve that we need to export a
+`LSP_USE_PLISTS=true` environmental variable and ensure that Emacs knows about it (before `lsp-mode` is compiled).
+
+
 #### Debugging {#debugging}
 
 > DAP expects ptvsd by default as the Python debugger, however debugpy is recommended.
@@ -3460,7 +3634,7 @@ $ pip3 install debugpy --user
 ```
 
 ```emacs-lisp
-(after! (python-mode dap-mode)
+(after! (python dap-mode)
   (setq dap-python-debugger 'debugpy))
 ```
 
@@ -3482,8 +3656,10 @@ Install some extra `flycheck` packages for Elixir
   (flycheck-add-next-checker 'lsp-ui 'elixir-credo))
 ```
 
+TODO Make tree-sitter font faces look pretty for Elixir..
 
-#### LSP {#lsp}
+
+#### LSP Elixir {#lsp-elixir}
 
 Configure `lsp-language-id-configuration` for `heex` templates.
 
@@ -3686,7 +3862,7 @@ Advice the `*cargo-run*` buffer to accept user input (why doesn't it already?).
 ```
 
 
-#### LSP {#lsp}
+#### LSP Rust {#lsp-rust}
 
 Configures `lsp-mode` hints for Rust (using `rust-analyzer`)
 (From [rust-emacs-setup](https://robert.kra.hn/posts/rust-emacs-setup/) guide)
