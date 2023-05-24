@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2023-03-07T07:58:23+01:00
+lastmod = 2023-05-24T08:36:41+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -646,7 +646,8 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
     <a id="code-snippet--doom-emacs"></a>
     ```emacs-lisp
-    (dired +icons)      ; making dired pretty [functional]
+    (dired              ; making dired pretty [functional]
+     +icons)
     electric            ; smarter, keyword-based electric-indent
     (ibuffer +icons)    ; interactive buffer management
     (undo)              ; persistent, smarter undo for your inevitable mistakes
@@ -891,7 +892,7 @@ nice to use a dark theme. Let's add favorite themes to a `doom-cycle-themes` lis
 
 ```emacs-lisp
 (setq doom-cycle-themes '(doom-solarized-light  ;; a list of themes to cycle
-                          doom-moonlight))
+                          doom-nord-aurora))
 ```
 
 We'll use the first theme in the list as our default theme.
@@ -1586,7 +1587,7 @@ Improvements from `precedent` are mostly from history, let's improve its memory.
               prescient-history-length 1000)
 ```
 
-Ispell is nice, lets have it in text, markdown, and GFM.
+Ispell is nice, lets have it in text, markdown, and GFM (Github Flavored Markdown).
 
 ```emacs-lisp
 (set-company-backend!
@@ -1947,27 +1948,42 @@ configure `lsp-origami` to use for code folding with `lsp-mode`.
 
 #### Ispell {#ispell}
 
+Easily cycle between the languages I use (English and Norwegian) by hitting `F8`.
+
+```emacs-lisp
+(let ((langs '("english" "norsk")))
+  (setq lang-ring (make-ring (length langs)))
+  (dolist (elem langs) (ring-insert lang-ring elem)))
+
+(defun cycle-ispell-languages ()
+  "Cycle between languages in the language ring definded above"
+  (interactive)
+  (let ((lang (ring-ref lang-ring -1)))
+    (ring-insert lang-ring lang)
+    (ispell-change-dictionary lang)))
+
+;; Cycle languages with F8
+(global-set-key (kbd "<f8>") #'cycle-ispell-languages)
+
+;; And add a Doom shortcut to the "toggle" menu for good measures
+(map! :leader
+      (:prefix-map ("t" . "toggle")
+       :desc "Next spell checker language" "S" #'cycle-ispell-languages))
+```
+
+For a personal dictionaries (with all the misspelled words and such)
+
+```emacs-lisp
+(setq spell-fu-directory (expand-file-name ".dictionaries" doom-private-dir)
+      ispell-personal-dictionary (expand-file-name ".dictionaries/.pws" doom-private-dir))
+```
+
 <!--list-separator-->
 
 -  Downloading dictionaries
 
     Currently using Aspell with Norwegian and English languages.
     Should probably document installation.
-
-<!--list-separator-->
-
--  Configuration
-
-    ```emacs-lisp
-    (setq ispell-dictionary "en")
-    ```
-
-    For a personal dictionaries (with all the misspelled words and such)
-
-    ```emacs-lisp
-    (setq spell-fu-directory (expand-file-name ".spell-fu_personal" doom-private-dir)
-          ispell-personal-dictionary (expand-file-name ".ispell_personal" doom-private-dir))
-    ```
 
 
 #### Language tool {#language-tool}
@@ -2061,8 +2077,7 @@ Default keybindings for this package is:
 
     > From the `:tools magit` module
 
-    Making `magit` a tad prettier.
-    (Taken from the [Modern Emacs](http://www.modernemacs.com/#spacemacs) blog)
+    Taken from the [Modern Emacs](http://www.modernemacs.com/#spacemacs) blog
 
     ```emacs-lisp
     (after! magit
@@ -2136,6 +2151,19 @@ Default keybindings for this package is:
                                   ("clean"   ? (:foreground "#FFBB00" :height 1.2))
                                   ("docs"    ? (:foreground "#3F681C" :height 1.2))))
       (pretty-magit-setup))
+    ```
+
+    Run `vc-refresh-state()` for all buffers in Magit's `post-refresh-hook`.
+
+    ```emacs-lisp
+    (after! magit
+      (defun cust/vc-refresh-all-buffers-state ()
+        "Update version control state in all buffers"
+        (dolist (buf (buffer-list))
+          (with-current-buffer buf
+            (vc-refresh-state))))
+
+      (add-hook 'magit-post-refresh-hook #'cust/vc-refresh-all-buffers-state))
     ```
 
 <!--list-separator-->
@@ -2309,10 +2337,13 @@ Make `treemacs` pretty and functional.
   ;; Workaround:
   (set-popup-rule! "^ \\*Treemacs"
     :side treemacs-position
-    :width treemacs-width)
+    :width treemacs-width
+    :quit nil)
 
   (treemacs-project-follow-mode t)
-  (treemacs-follow-mode t))
+  (treemacs-follow-mode t)
+  (treemacs-define-RET-action 'file-node-open   #'treemacs-visit-node-in-most-recently-used-window)
+  (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-in-most-recently-used-window))
 ```
 
 `lsp-treemacs` integrates `treemacs` with `lsp-mode`.
@@ -2471,7 +2502,7 @@ To use this we'll just hook into `Info`.
 
 > From the `:ui zen` module.
 
-I'd like to toggle `writeroom-mode` for all buffers at once.
+I like to toggle `writeroom-mode` for all buffers at once.
 
 ```emacs-lisp
 (map! :leader
@@ -3555,6 +3586,48 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
         ```
 
 
+#### OpenAI {#openai}
+
+[Org-ai](https://github.com/rksm/org-ai) is a ChatGPT and Dall-E integration for Org (minor mode).
+Inspired by `org-babel` code blocks this package uses `#+begin_ai ... #+end_ai` blocks to
+interact with AI models.
+
+```emacs-lisp
+(package! org-ai :recipe
+  (:host github :repo "rksm/org-ai" :files ("*.el" "snippets")))
+```
+
+API keys can be created on the [OpenAI API](https://platform.openai.com/account/api-keys) page, and is read from `~/.authinfo.gpg`
+using a format like:
+
+```nil
+machine api.openapi.com login org-ai password <api-key>
+```
+
+```emacs-lisp
+(use-package! org-ai
+  :commands (org-ai-mode)
+  :hook (org-mode . org-ai-mode)
+  :config (org-ai-install-yasnippets))
+```
+
+See [options](https://github.com/rksm/org-ai#options) for how detailed description on the various modes.
+
+<div class="ai">
+
+Is Emacs the best editor?
+
+</div>
+
+<div class="ai">
+
+An elephant playing basketball
+
+</div>
+
+Press `C-c C-c` in the code block to execute.
+
+
 ### Web/Javascript/Typescript {#web-javascript-typescript}
 
 Use prettier for formatting every `web-mode`.
@@ -3656,8 +3729,6 @@ Install some extra `flycheck` packages for Elixir
   (flycheck-add-next-checker 'lsp-ui 'elixir-credo))
 ```
 
-TODO Make tree-sitter font faces look pretty for Elixir..
-
 
 #### LSP Elixir {#lsp-elixir}
 
@@ -3733,6 +3804,29 @@ To configure Phoenix debugging
                                            "test/**/*_test.exs")
                                      :dap-server-path (list (concat (file-name-as-directory lsp-elixir-ls-server-dir) "debugger.sh"))))
   )
+```
+
+
+#### Tree-sitter for HEEX templates {#tree-sitter-for-heex-templates}
+
+Following the blog post for enabling tree-sitter for [HEEx on Doom Emacs](https://darwindwu.com/blog/2023-04-05-doom-emacs-heex-tree-sitter/) .
+Once Emacs 29 is released, this should no longer be necessary.
+
+```emacs-lisp
+;; Elixir
+;; Add heex-mode for modifying .heex files
+;; (after! web-mode tree-sitter-mode
+;;   (define-derived-mode heex-mode web-mode "HEEx" "Major mode for editing HEEx files")
+;;   (add-to-list 'auto-mode-alist '("\\.heex?\\'" . heex-mode))
+;;   (add-to-list 'tree-sitter-major-mode-language-alist '(heex-mode . heex))
+
+;;   (add-hook 'heex-mode-hook #'tree-sitter-hl-mode)
+;;   (add-hook 'heex-mode-hook
+;;             (lambda()
+;;               ;; Ask tree-sitter to load 'heex.so'
+;;               (tree-sitter-load 'heex)
+;;               ;; Auto format .heex files on save, requires liveview 0.18+
+;;               (add-hook 'before-save-hook 'elixir-format nil t))))
 ```
 
 
