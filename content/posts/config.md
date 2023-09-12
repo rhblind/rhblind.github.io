@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2023-05-24T08:36:41+02:00
+lastmod = 2023-09-13T00:14:08+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -38,7 +38,7 @@ So a big thanks to `tecosaur` for making my onboarding to Doom Emacs a smooth ex
 
 ## Installing Emacs {#installing-emacs}
 
-Emacs can be installed in many ways. I'm usually on a Mac, so I just uses [Homebrew](https://brew.sh/).
+Emacs can be installed in many ways. I'm usually on a Mac, so I just use [Homebrew](https://brew.sh/).
 There's a couple of Emacs packages in Homebrew, but the most popular seems to be [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) and [emacs-mac](https://github.com/railwaycat/homebrew-emacsmacport).
 I have been using `emacs-plus` for some time, but currently I'm testing out `emacs-mac`.
 
@@ -69,7 +69,6 @@ $ brew install emacs-plus@28 --with-modern-papirus-icon --with-debug --with-xwid
 ## Configuration {#configuration}
 
 Remember to run `doom sync` after modifiyng this file.
-Make this file run (slighty) faster with lexical binding (I don't know why, but the internet says so).
 
 ```emacs-lisp
 ;;; config.el -*- lexical-binding: t; -*-
@@ -88,45 +87,44 @@ Me
 Some functionality uses this to identify you, e.g. GPG configuration, email
 clients, file templates and snippets.
 
-And some random stuff that doesn't fit into any particual category
-
 
 ### Better defaults {#better-defaults}
 
+General settings that makes life a bit easier.
+
 ```emacs-lisp
-(setq auto-save-default          t         ; I don't want to lose work
-      delete-by-moving-to-trash  t         ; Delete files to trash
-      display-time-24hr-format   t         ; I dont know the difference between AM and PM
-      evil-want-fine-undo        t         ; More granular undos in evil insert mode
-      evil-ex-substitute-global  t         ; More often than not, I want /s on ex commands
-      evil-kill-on-visual-paste  nil       ; Don't add overwritten text in visual mode to the kill ring
-      mouse-wheel-tilt-scroll    t         ; Scroll horizontally using the mouse
-      mouse-wheel-flip-direction t         ; Scrolling for oldies
-      scroll-margin              2         ; Keep a little scroll margin
-      undo-limit                 16000000  ; Increase undo limit to 16Mb
-      vc-follow-symlinks         nil       ; Don't follow symlinks, edit them directly
-      which-key-idle-delay       0.2       ; Feels which-key feels more responsive
-      window-combination-resize  t         ; Take new window space from all other windows (not just the current)
-      x-stretch-cursor           t         ; Stretch cursor to the glyph width
+(setq auto-save-default            t         ; I don't want to lose work
+      delete-by-moving-to-trash    t         ; Delete files to trash
+      display-time-24hr-format     t         ; I dont know the difference between AM and PM
+      evil-want-fine-undo          t         ; More granular undos in evil insert mode
+      evil-ex-substitute-global    t         ; More often than not, I want /s on ex commands
+      evil-kill-on-visual-paste    nil       ; Don't add overwritten text in visual mode to the kill ring
+      mouse-wheel-tilt-scroll      t         ; Scroll horizontally using the mouse
+      mouse-wheel-flip-direction   t         ; Scrolling for oldies
+      pixel-scroll-precision-mode  t         ; Enable pixel scroll precision mode (requires Emacs 29)
+      scroll-margin                10        ; Keep a little scroll margin
+      undo-limit                   16000000  ; Increase undo limit to 16Mb
+      vc-follow-symlinks           nil       ; Don't follow symlinks, edit them directly
+      which-key-idle-delay         0.2       ; Makes which-key feels more responsive
+      window-combination-resize    t         ; Take new window space from all other windows (not just the current)
+      x-stretch-cursor             t         ; Stretch cursor to the glyph width
       )
 ```
 
-Some modes I always want active
+Here are some modes I always want active.
 
 ```emacs-lisp
 (display-time-mode              1)        ; I want to know what time it is
 (drag-stuff-global-mode         1)        ; Drag text around
 (global-company-mode            1)        ; Enable autocomplete all over
+(global-goto-address-mode       1)        ; A minor mode to render urls and like as links
 (global-subword-mode            1)        ; Iterate through CamelCase words - Not sure how I like this
 (smartparens-global-mode        1)        ; Always enable smartparens
 (smartparens-global-strict-mode 1)        ; And keep it strict
 (ws-butler-global-mode          1)        ; Unobtrusive way to trim spaces on end of lines
-
-;; (unless (string-match-p "^Power N/A" (battery))         ; On laptops...  FIXME - gives me error when running `doom doctor'
-;;   (display-battery-mode 1))                             ; it's nice to know how much power you have
 ```
 
-I like to have the local leader key bound to `,`
+I like to have the local leader key bound to `,`.
 
 ```emacs-lisp
 (setq doom-localleader-key      ","
@@ -137,16 +135,16 @@ I like to have the local leader key bound to `,`
 #### Windows {#windows}
 
 I find it rather handy to be asked which buffer I want to see after splitting
-the window. Let's make that happen.
+the window.
 
-First, we'll enter the new window
+First, split the window...
 
 ```emacs-lisp
 (setq evil-vsplit-window-right t
       evil-split-window-below t)
 ```
 
-Then, we'll pull up a buffer prompt.
+...then, pull up a buffer prompt.
 
 ```emacs-lisp
 (defadvice! prompt-for-buffer (&rest _)
@@ -168,7 +166,7 @@ Then, we'll pull up a buffer prompt.
     (package! default-text-scale)
     ```
 
-    Enable the global minor mode and add some extra keybindings for macOS. I think
+    Enable `default-text-scale-mode` global minor mode and add some extra keybindings for macOS. I think
     it's easier to just use `CMD-+/-/0` to increase, decrease and reset.
 
     ```emacs-lisp
@@ -186,24 +184,22 @@ Then, we'll pull up a buffer prompt.
 
 -  Buffer manipulation
 
-    <!--list-separator-->
+    These little guys are helpful to remove duplicates in a region or buffer.
 
-    -  Uniquify buffer functions
+    ```emacs-lisp
+    (defun uniquify-region-lines (beg end)
+      "Remove duplicate adjacent lines in region."
+      (interactive "*r")
+      (save-excursion
+        (goto-char beg)
+        (while (re-search-forward "^\\(.*\n\\)\\1+" end t)
+          (replace-match "\\1"))))
 
-        ```emacs-lisp
-        (defun uniquify-region-lines (beg end)
-          "Remove duplicate adjacent lines in region."
-          (interactive "*r")
-          (save-excursion
-            (goto-char beg)
-            (while (re-search-forward "^\\(.*\n\\)\\1+" end t)
-              (replace-match "\\1"))))
-
-        (defun uniquify-buffer-lines ()
-          "Remove duplicate adjacent lines in the current buffer."
-          (interactive)
-          (uniquify-region-lines (point-min) (point-max)))
-        ```
+    (defun uniquify-buffer-lines ()
+      "Remove duplicate adjacent lines in the current buffer."
+      (interactive)
+      (uniquify-region-lines (point-min) (point-max)))
+    ```
 
 
 #### Hacks {#hacks}
@@ -259,18 +255,23 @@ just copy it in place whenever I'm on a new computer.
   (pinentry-start)
   ;; (load-file (expand-file-name "secrets.el.gpg" doom-private-dir)) ; This cause weird errors
   )
+```
 
-; I'm using gpg-agent instead of ssh-agent so we need to connect here.
+I'm using `gpg-agent` instead of `ssh-agent` so we need to connect here.
+
+```emacs-lisp
 (shell-command "gpg-connect-agent updatestartuptty /bye >/dev/null")
 ```
 
 
 ### Keybindings {#keybindings}
 
-Here's some [examples](https://github.com/hlissner/doom-emacs/blob/master/modules/config/default/+evil-bindings.el) on how to bind keymaps
+Event though Doom Emacs makes a lot of stuff easy, I always needs to [look up](https://github.com/hlissner/doom-emacs/blob/master/modules/config/default/+evil-bindings.el) how to bind keymaps.
 
 
 #### Window navigation {#window-navigation}
+
+Select windows using `M-[1..9]`.
 
 ```emacs-lisp
 (map! "M-0"  #'treemacs-select-window  ;; make treemacs accessible as Window #0
@@ -310,14 +311,14 @@ my workflow, so I rebind some of them.
 
 #### Buffer navigation {#buffer-navigation}
 
-I really like cycling between two buffers using `SPC-Tab`
+I like cycling between the two last buffers using `SPC-Tab`.
 
 ```emacs-lisp
 (map! :leader :desc "Cycle last buffer" "TAB" #'evil-switch-to-windows-last-buffer)     ; Use SPC-Tab to cycle between two last buffers
 ```
 
-I really like to move buffers around using `SPC-b [1..9]`.
-The following functions are ported directly from `Spacemacs`, and relies only at `winum`.
+Move around buffers using `SPC-b [1..9]`.
+The following functions are ported directly from `Spacemacs` and relies only at `winum`.
 
 ```emacs-lisp
 (after! winum
@@ -355,9 +356,9 @@ controls whether focus moves to new window (with buffer), or stays on current."
       (when follow-focus-p (winum-select-window-by-number windownum))))
 
   ;; define and evaluate three numbered functions
-  ;; buffer-to-window-1 to 9
-  ;; move-buffer-to-window-no-follow-1 to 9
-  ;; swap-buffer-to-window-no-follow-1 to 9
+  ;; - buffer-to-window-1 to 9
+  ;; - move-buffer-to-window-no-follow-1 to 9
+  ;; - swap-buffer-to-window-no-follow-1 to 9
   (dotimes (i 9)
     (let ((n (+ i 1)))
       (eval `(defun ,(intern (format "buffer-to-window-%s" n)) (&optional arg)
@@ -375,7 +376,7 @@ controls whether focus moves to new window (with buffer), or stays on current."
                (swap-buffers-to-window ,n nil))))))
 ```
 
-Let's map the newly defined function to `SPC-b [1..9]` for easy access.
+Map the newly defined function to `SPC-b [1..9]` for easy access.
 
 ```emacs-lisp
 (map! :leader
@@ -392,20 +393,7 @@ Let's map the newly defined function to `SPC-b [1..9]` for easy access.
 ```
 
 
-#### Jumping around with Avy {#jumping-around-with-avy}
-
-Doom Emacs comes pre-configures with `avy` and it is pretty reasonable configured out of the box.
-However, I never remember how to use it, so I'll jot down some notes here. Here's a quick
-[YouTube video](https://www.youtube.com/watch?v=zar4GsOBU0g) covering some basic usage.
-
-The **basics**
-
--   `g s` - Opens the prefix menu for doing jump navigation
--   `g s` - Jump using `evil-avy-goto-char-2` requiring 2 characters before triggering
--   `g s SPC` - Jump in closure using `evil-avy-goto-char-timer` requiring 1 character before triggering
-
-
-#### Misc {#misc}
+#### Buffer manipulation {#buffer-manipulation}
 
 Erase content of current buffer with `SPC-b e`
 
@@ -429,13 +417,11 @@ This function is from stackoverflow.com (https://stackoverflow.com/a/10216310)"
        :desc "Copy buffer" "Y" #'copy-buffer-to-clipboard))
 ```
 
-Copy clipboard and replace buffer with `SPC-b P`
+Replace buffer with content from clipboard with `SPC-b P`.
 
 ```emacs-lisp
-(defun copy-clipboard-to-buffer ()
-  "Copy clipboard and replace buffer.
-This function is shamelessly stolen from spacemacs
-(https://github.com/syl20bnr/spacemacs/blob/3ba43e29165fb17d39baab528d63a63e907fa81a/layers/%2Bspacemacs/spacemacs-defaults/funcs.el#L1272)"
+(defun replace-buffer-from-clipboard ()
+  "Replace the buffer with content from clipboard."
   (interactive)
   (delete-region (point-min) (point-max))
   (clipboard-yank)
@@ -443,10 +429,26 @@ This function is shamelessly stolen from spacemacs
 
 (map! :leader
       (:prefix-map ("b" . "buffer")
-       :desc "Paste clipboard" "P" #'copy-clipboard-to-buffer))
+       :desc "Paste clipboard to buffer" "P" #'replace-buffer-from-clipboard))
 ```
 
-List processes
+
+#### Jumping around with Avy {#jumping-around-with-avy}
+
+Doom Emacs comes pre-configures with `avy` and it is pretty reasonable configured out of the box.
+However, I never remember how to use it, so I'll jot down some notes here. Here's a quick
+[YouTube video](https://www.youtube.com/watch?v=zar4GsOBU0g) covering some basic usage.
+
+The **basics**
+
+-   `g s` - Opens the prefix menu for doing jump navigation
+-   `g s` - Jump using `evil-avy-goto-char-2` requiring 2 characters before triggering
+-   `g s SPC` - Jump in closure using `evil-avy-goto-char-timer` requiring 1 character before triggering
+
+
+#### Misc {#misc}
+
+List all processes running under Emacs.
 
 ```emacs-lisp
 (map! :leader
@@ -617,7 +619,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ophints             ; highlight the region an operation acts on
     (popup
      +all +defaults)    ; tame sudden yet inevitable temporary windows
-    ;; tabs             ; a tab bar for Emacs
+    ;;tabs              ; a tab bar for Emacs
     treemacs            ; a project drawer, like neotree but cooler
     ;;unicode           ; extended unicode support for various languages
     vc-gutter           ; vcs diff in the fringe
@@ -758,7 +760,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;latex             ; writing papers in Emacs has never been so fun
     ;;lean              ; for folks with too much to prove
     ;;ledger            ; be audit you can be
-    ;;lua               ; one-based indices? one-based indices
+    lua                 ; one-based indices? one-based indices
     (markdown +grip)    ; writing docs for people to ignore
     ;;nim               ; python + lisp at the speed of c
     ;;nix               ; I hereby declare "nix geht mehr!"
@@ -956,6 +958,13 @@ Add some extra bells and whistles to the Doom modeline.
       doom-modeline-major-mode-icon             t
       doom-modeline-major-mode-color-icon       t
       doom-modeline-buffer-state-icon           t)
+```
+
+Also, in Emacs 29.1 we got support for transparent backgrounds. This can be enabled by the following
+command if desired.
+
+```emacs-lisp
+(set-frame-parameter nil 'alpha-background 70)
 ```
 
 
@@ -1565,6 +1574,26 @@ Nice way to create custom themes
 ```
 
 
+#### Centaur-tabs {#centaur-tabs}
+
+> From the `:ui tabs` module
+
+Yup, tabs...
+
+```emacs-lisp
+(after! centaur-tabs
+  (setq centaur-tabs-height 24
+        centaur-tabs-set-bar 'over
+        centaur-tabs-set-icons t
+        centaur-tabs-set-modified-marker t
+        centaur-tabs-modifier-marker "◉"
+        centaur-tabs-gray-out-icons 'buffer)
+
+  ;; Disable tabs for certain stuff
+  (add-hook! 'dired-mode-hook #'centaur-tabs-local-mode))
+```
+
+
 #### Company {#company}
 
 > From the `:completion company` module
@@ -1838,6 +1867,8 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
 
 > From the `:editor evil` module.
 
+[Here](https://countvajhula.com/2021/01/21/vim-tip-of-the-day-a-series/) is a pretty good series on Vim.
+
 <!--list-separator-->
 
 -  Functions
@@ -1946,7 +1977,33 @@ configure `lsp-origami` to use for code folding with `lsp-mode`.
 ```
 
 
+#### GitHub Copilot {#github-copilot}
+
+Unofficial GitHub Copilot plugin for Emacs.
+
+```emacs-lisp
+(package! copilot
+  :recipe (:host github :repo "zerolfx/copilot.el" :files ("*.el" "dist")))
+```
+
+```emacs-lisp
+;; accept completion from copilot and fallback to company
+(use-package! copilot
+  :hook (prog-mode . copilot-mode)
+  :bind (:map copilot-completion-map
+              ("<tab>" . 'copilot-accept-completion)
+              ("TAB" . 'copilot-accept-completion)
+              ("C-TAB" . 'copilot-accept-completion-by-word)
+              ("C-<tab>" . 'copilot-accept-completion-by-word)))
+```
+
+Required to run `M-x copilot-login` for using the plugin.
+
+
 #### Ispell {#ispell}
+
+TODO: Fix Spelling!
+[doomemacs/doomemacs#4009 Spell-Fu marks every word as incorrect](https://github.com/doomemacs/doomemacs/issues/4009)
 
 Easily cycle between the languages I use (English and Norwegian) by hitting `F8`.
 
@@ -1956,7 +2013,7 @@ Easily cycle between the languages I use (English and Norwegian) by hitting `F8`
   (dolist (elem langs) (ring-insert lang-ring elem)))
 
 (defun cycle-ispell-languages ()
-  "Cycle between languages in the language ring definded above"
+  "Cycle between languages in the language ring `lang-ring`."
   (interactive)
   (let ((lang (ring-ref lang-ring -1)))
     (ring-insert lang-ring lang)
@@ -1975,7 +2032,11 @@ For a personal dictionaries (with all the misspelled words and such)
 
 ```emacs-lisp
 (setq spell-fu-directory (expand-file-name ".dictionaries" doom-private-dir)
-      ispell-personal-dictionary (expand-file-name ".dictionaries/.pws" doom-private-dir))
+      ispell-extra-args '("--sug-mode=ultra" "--lang=en_US" "--run-together")
+      ispell-personal-dictionary (expand-file-name ".dictionaries/personal.pws" doom-private-dir))
+
+(unless (file-exists-p ispell-personal-dictionary)
+  (write-region "" nil ispell-personal-dictionary nil 0))
 ```
 
 <!--list-separator-->
@@ -1984,6 +2045,15 @@ For a personal dictionaries (with all the misspelled words and such)
 
     Currently using Aspell with Norwegian and English languages.
     Should probably document installation.
+
+
+#### Intility Command Line Tool (inctl) {#intility-command-line-tool--inctl}
+
+```emacs-lisp
+;; (use-package! inctl
+;;   :load-path (expand-file-name "lisp/inctl" doom-private-dir)
+;;   :config inctl-dispatch)
+```
 
 
 #### Language tool {#language-tool}
@@ -2308,6 +2378,12 @@ Set some sensible `projectile` settings.
   (sp-local-pair '(org-mode) "<<" ">>" :actions '(insert)))
 ```
 
+Enable colored matching for delimiters
+
+```emacs-lisp
+(add-hook! 'prog-mode-hook #'rainbow-delimiters-mode)
+```
+
 
 #### Tramp {#tramp}
 
@@ -2376,8 +2452,9 @@ Emacs search APIs instead of 3rd party tools.
 
   ;; These mappings seems a bit inverted, but it works as I like it, so I dunno...?
   (map! :map vertico-map
-        "C-u"   #'vertico-scroll-down
-        "C-d"   #'vertico-scroll-up))
+        "C-u"     #'vertico-scroll-down
+        "C-d"     #'vertico-scroll-up
+        "C-c C-o" #'embark-export))
 ```
 
 **Tips'n tricks**
@@ -2629,6 +2706,10 @@ For some file types, we overwrite defaults in the snippets directory, others nee
 ```emacs-lisp
 (after! lsp-mode
   (setq lsp-response-timeout 10))
+
+(after! lsp-ui
+  (define-key lsp-ui-mode-map [remap xref-find-definitions] #'lsp-ui-peek-find-definitions)
+  (define-key lsp-ui-mode-map [remap xref-find-references] #'lsp-ui-peek-find-references))
 ```
 
 
@@ -2671,6 +2752,12 @@ Everybody likes org-mode!
 
 
 #### Behaviour {#behaviour}
+
+Sometimes I'm a bit lazy and just want to click around with the mouse.
+
+```emacs-lisp
+(require 'org-mouse)
+```
 
 <!--list-separator-->
 
@@ -3835,45 +3922,43 @@ Once Emacs 29 is released, this should no longer be necessary.
 
 #### C-sharp {#c-sharp}
 
-NOTE: After too many hours struggling with `omnisharp-rosly` without managing to make it work,
-I settles on just using `csharp-ls`.
-Let's revisit `omnisharp-roslyn` at a later point.
-
-The default "latest" release of omnisharp-roslyn does not target .NET 6 SDK.  We override the default
-and downloads a newer release that's compatible with .NET 6. See [this](https://github.com/OmniSharp/omnisharp-roslyn/issues/2407#issuecomment-1170354657) Github issue for more details.
-Omnisharp-roslyn releases can be found [here](https://github.com/OmniSharp/omnisharp-roslyn/releases).
-
-```emacs-lisp
-;; (after! lsp-csharp
-;;   (setq lsp-csharp-omnisharp-roslyn-download-url (cond ((eq system-type 'darwin) "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.0/omnisharp-osx-x64-net6.0.zip")
-;;                                                        ((eq system-type 'gnu/linux) "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.0/omnisharp-linux-x64-net6.0.zip")
-;;                                                        ((eq system-type 'windown-nt) "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v1.39.0/omnisharp-win-x64-net6.0.zip")))
-;;   (setq lsp-csharp-server-path (f-join lsp-csharp-omnisharp-roslyn-server-dir "OmniSharp"))
-;;   )
-```
-
-NOTE: `lsp-csharp` appends "-lsp" at the end of "OmniSharp" command. This seems to not work too great with new version (and should be fixed upstreams).
-
-Just changing the `lsp-csharp-omnisharp-roslyn-download-url` didn't work for me, so I manually downloaded the
-zip file and extracted it to the `lsp-csharp-omnisharp-roslyn-server-dir` directory.
-
-On MacOS, the "Malicious Software" warning triggered when trying to start the lsp-server, so I had to
-whiteliste all the files in the directory manually.
-
-```shell
-$ xattr -r -d com.apple.quarantine ~/.emacs.d-doom/.local/etc/lsp/omnisharp-roslyn/latest/omnisharp-roslyn/*
-```
-
-Add the `dotnet.el` package and load it with `c-sharp-mode`.
+C-sharp is supported by default in newer versions of Emacs through `csharp-tree-sitter-mode`.
+Install the `dotnet` package as well to get some extra goodies.
 
 ```emacs-lisp
 (package! dotnet)
 ```
 
-```emacs-lisp
-(use-package! dotnet
-  :hook (csharp-mode . dotnet-mode))
-```
+<!--list-separator-->
+
+-  LSP
+
+    ```emacs-lisp
+    (add-hook! 'csharp-tree-sitter-mode-hook #'lsp)
+    ```
+
+    ```emacs-lisp
+    (use-package! dotnet
+      :hook (csharp-tree-sitter-mode . dotnet-mode))
+
+    (add-to-list 'auto-mode-alist
+                 '("\\.csproj\\'" . (lambda () (csproj-mode))))
+    ```
+
+<!--list-separator-->
+
+-  DAP
+
+    To make DAP work nicely we need to install the netcoredbg. It's supposed to be able to
+    install automatically using `M-x dap-netcore-update-debugger`, but it's not working correctly for me.
+    The correct version can be downloaded from <https://github.com/Samsung/netcoredbg/releases>,
+    and put in `~/.config/emacs/.local/cache/.cache/lsp/netcoredbg`.
+
+    ```emacs-lisp
+    (after! (dotnet dap-mode)
+      (require 'dap-netcore)
+      (setq dap-netcore-install-dir (f-join user-emacs-directory ".cache" "lsp")))
+    ```
 
 <!--list-separator-->
 
@@ -3882,10 +3967,10 @@ Add the `dotnet.el` package and load it with `c-sharp-mode`.
     Add the `sharper-main-transient` menu to local leader.
 
     ```emacs-lisp
-    (map! :map csharp-mode-map
-          :after csharp
-          :localleader
-          :desc "Sharper" "s" #'sharper-main-transient)
+    ;; (map! :map csharp-tree-sitter-mode-map
+    ;;       :after csharp-tree-sitter
+    ;;       :localleader
+    ;;       :desc "Sharper" "s" #'sharper-main-transient)
     ```
 
 
