@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2023-09-13T00:14:08+02:00
+lastmod = 2024-05-29T10:05:56+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -36,13 +36,17 @@ but it's slowly morphing into my own :)
 So a big thanks to `tecosaur` for making my onboarding to Doom Emacs a smooth experience!
 
 
+### Great Emacs configs {#great-emacs-configs}
+
+-   [tecosaurs Emacs config](https://tecosaur.github.io/emacs-config/config.html)
+-   [nehrbashs Emacs config](https://github.com/nehrbash/dotfiles/blob/main/Emacs.org)
+
+
 ## Installing Emacs {#installing-emacs}
 
 Emacs can be installed in many ways. I'm usually on a Mac, so I just use [Homebrew](https://brew.sh/).
 There's a couple of Emacs packages in Homebrew, but the most popular seems to be [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) and [emacs-mac](https://github.com/railwaycat/homebrew-emacsmacport).
-I have been using `emacs-plus` for some time, but currently I'm testing out `emacs-mac`.
-
-Here's the installation commands I'm using.
+I have been using `emacs-mac` for some time now, but was previously running `emacs-plus`.
 
 
 ### Emacs-mac {#emacs-mac}
@@ -51,10 +55,10 @@ Installation instructions are in the [README](https://github.com/railwaycat/home
 
 ```shell
 $ brew tap railwaycat/emacsmacport
-$ brew install emacs-mac --with-natural-title-bar --with-native-comp --with-xwidgets --with-librsvg --with-imagemagick --with-emacs-big-sur-icon
+$ brew install emacs-mac --with-unlimited-select --with-tree-sitter --with-natural-title-bar --with-native-comp --with-xwidgets --with-librsvg --with-imagemagick --with-emacs-big-sur-icon
 ```
 
-There is also some pre-built binaries available, but I'm not sure what flags they are compiled with.
+See the [emacs-mac.rb](https://github.com/railwaycat/homebrew-emacsmacport/blob/master/Formula/emacs-mac.rb) formula file for a list of supported compilation flags.
 
 
 ### Emacs-plus {#emacs-plus}
@@ -64,6 +68,28 @@ The [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus) is another H
 ```shell
 $ brew install emacs-plus@28 --with-modern-papirus-icon --with-debug --with-xwidgets --with-native-comp
 ```
+
+
+### Fix annoying max open files for Emacs {#fix-annoying-max-open-files-for-emacs}
+
+When using LSP servers with Emacs, it's easy to hit the "max open files" error. Emacs doesn't seem to use
+operating system `ulimit`, but uses `pselect` which is limited to FD_SETSIZE file descriptors, usually 1024.
+This means that changing `ulimit` will not change the value of FD_SETSIZE compiled into Emacs and macOS
+libraries. To overcome this limitation we've to set the FD_SETSIZE CFLAG when compiling Emacs.
+
+```nil
+CFLAGS="-DFD_SETSIZE=10000 -DDARWIN_UNLIMITED_SELECT"
+```
+
+See [this](https://en.liujiacai.net/2022/09/03/emacs-maxopenfiles/) blog post for a more detailed description.
+
+
+## Getting started {#getting-started}
+
+Describe steps required to do in order to get this up and running on a new machine.
+
+1.  Install nerd-fonts
+    Doom modeline required nerd-fonts now. run `M-x nerd-icons-install-fonts`.
 
 
 ## Configuration {#configuration}
@@ -87,6 +113,11 @@ Me
 Some functionality uses this to identify you, e.g. GPG configuration, email
 clients, file templates and snippets.
 
+```emacs-lisp
+(defconst user-home-directory (expand-file-name (file-name-as-directory "~"))
+  "A constant that holds the current users home directory.")
+```
+
 
 ### Better defaults {#better-defaults}
 
@@ -99,10 +130,12 @@ General settings that makes life a bit easier.
       evil-want-fine-undo          t         ; More granular undos in evil insert mode
       evil-ex-substitute-global    t         ; More often than not, I want /s on ex commands
       evil-kill-on-visual-paste    nil       ; Don't add overwritten text in visual mode to the kill ring
+      fill-column                  120       ; We have lot's of screen estate
       mouse-wheel-tilt-scroll      t         ; Scroll horizontally using the mouse
       mouse-wheel-flip-direction   t         ; Scrolling for oldies
       pixel-scroll-precision-mode  t         ; Enable pixel scroll precision mode (requires Emacs 29)
       scroll-margin                10        ; Keep a little scroll margin
+      sh-shell                     "sh"      ; The shell to use when spawning external commands
       undo-limit                   16000000  ; Increase undo limit to 16Mb
       vc-follow-symlinks           nil       ; Don't follow symlinks, edit them directly
       which-key-idle-delay         0.2       ; Makes which-key feels more responsive
@@ -120,7 +153,6 @@ Here are some modes I always want active.
 (global-goto-address-mode       1)        ; A minor mode to render urls and like as links
 (global-subword-mode            1)        ; Iterate through CamelCase words - Not sure how I like this
 (smartparens-global-mode        1)        ; Always enable smartparens
-(smartparens-global-strict-mode 1)        ; And keep it strict
 (ws-butler-global-mode          1)        ; Unobtrusive way to trim spaces on end of lines
 ```
 
@@ -130,76 +162,6 @@ I like to have the local leader key bound to `,`.
 (setq doom-localleader-key      ","
       doom-localleader-alt-key  "M-,")
 ```
-
-
-#### Windows {#windows}
-
-I find it rather handy to be asked which buffer I want to see after splitting
-the window.
-
-First, split the window...
-
-```emacs-lisp
-(setq evil-vsplit-window-right t
-      evil-split-window-below t)
-```
-
-...then, pull up a buffer prompt.
-
-```emacs-lisp
-(defadvice! prompt-for-buffer (&rest _)
-  :after '(evil-window-split evil-window-vsplit)
-  (consult-buffer))
-```
-
-
-#### Buffers {#buffers}
-
-<!--list-separator-->
-
--  Text scaling
-
-    The `default-text-scale` package works by adjusting the size of the `default` face,
-    so that it affects all buffers at once.
-
-    ```emacs-lisp
-    (package! default-text-scale)
-    ```
-
-    Enable `default-text-scale-mode` global minor mode and add some extra keybindings for macOS. I think
-    it's easier to just use `CMD-+/-/0` to increase, decrease and reset.
-
-    ```emacs-lisp
-    (default-text-scale-mode 1)
-    (map! :map default-text-scale-mode-map
-          (:when (eq system-type 'darwin)
-            "s-+"     #'default-text-scale-increase
-            "s--"     #'default-text-scale-decrease
-            "s-0"     #'default-text-scale-reset)
-          (:when (and (modulep! :ui workspaces) (eq system-type 'darwin)
-                      (define-key evil-normal-state-map (kbd "s-0") nil))))
-    ```
-
-<!--list-separator-->
-
--  Buffer manipulation
-
-    These little guys are helpful to remove duplicates in a region or buffer.
-
-    ```emacs-lisp
-    (defun uniquify-region-lines (beg end)
-      "Remove duplicate adjacent lines in region."
-      (interactive "*r")
-      (save-excursion
-        (goto-char beg)
-        (while (re-search-forward "^\\(.*\n\\)\\1+" end t)
-          (replace-match "\\1"))))
-
-    (defun uniquify-buffer-lines ()
-      "Remove duplicate adjacent lines in the current buffer."
-      (interactive)
-      (uniquify-region-lines (point-min) (point-max)))
-    ```
 
 
 #### Hacks {#hacks}
@@ -284,6 +246,35 @@ Select windows using `M-[1..9]`.
       "M-7"  #'winum-select-window-7
       "M-8"  #'winum-select-window-8
       "M-9"  #'winum-select-window-9)
+```
+
+Close temporary windows in the current frame.
+
+```emacs-lisp
+(defun cust/close-temporary-window ()
+  "Close all temporary windows in the current frame.
+Returns t if any windows were closed."
+  (interactive)
+  (save-selected-window
+    (let (result)
+      (dolist (window (window-list))
+        (select-window window)
+        (cond ((or (eq major-mode #'help-mode)
+                   (eq major-mode #'compilation-mode)
+                   (eq major-mode #'completion-list-mode)
+                   (eq major-mode #'grep-mode)
+                   (eq major-mode #'apropos-mode))
+               (quit-window)
+               (setf result t))
+              ((eq major-mode #'magit-popup-mode)
+               (magit-popup-quit)
+               (setf result t))))
+      result)))
+
+;; Bind the function to ESC
+(let ((key
+       (if window-system (kbd "<escape>") "\M-q")))
+  (global-set-key key #'cust/close-temporary-window))
 ```
 
 
@@ -451,8 +442,7 @@ The **basics**
 List all processes running under Emacs.
 
 ```emacs-lisp
-(map! :leader
-      :desc "List processes" "P" #'list-processes)
+(map! :leader :desc "List processes" "P" #'list-processes)
 ```
 
 
@@ -481,21 +471,6 @@ staving off the collector while I'm working.
                                   (setq gcmh-idle-delay  'auto                     ; or N seconds
                                         gcmh-high-cons-threshold (* 16 1024 1024)  ; 16mb
                                         gcmh-verbose nil)))
-```
-
-
-#### Benchmarking {#benchmarking}
-
-Testing out `benchmark-init` to benchmark Emacs performance.
-
-```emacs-lisp
-;;(package! benchmark-init)
-```
-
-```emacs-lisp
-;; (when init-file-debug
-;;   (require 'benchmark-init)
-;;   (add-hook 'doom-first-input-hook #'benchmark-init/deactivate))
 ```
 
 
@@ -573,7 +548,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     using the `unpin` macro.
 
     ```emacs-lisp
-    ;; (unpin! elixir)
+    (unpin! (:tools lsp tree-sitter))
     ```
 
 <!--list-separator-->
@@ -667,8 +642,9 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     <a id="code-snippet--doom-checkers"></a>
     ```emacs-lisp
     syntax              ; tasing you for every semicolon you forget
-    (:if                ; tasing you for misspelling mispelling
-     (executable-find "aspell") spell +aspell)
+    ;; (:if                ; tasing you for misspelling mispelling
+    ;;  (executable-find "aspell") spell +aspell +flyspell)
+    (spell +aspell +flyspell)
     grammar             ; tasing grammar mistake every you make
     ```
 
@@ -761,7 +737,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;lean              ; for folks with too much to prove
     ;;ledger            ; be audit you can be
     lua                 ; one-based indices? one-based indices
-    (markdown +grip)    ; writing docs for people to ignore
+    markdown            ; writing docs for people to ignore
     ;;nim               ; python + lisp at the speed of c
     ;;nix               ; I hereby declare "nix geht mehr!"
     ;;ocaml             ; an objective camel
@@ -774,7 +750,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
      +pandoc            ; export-with-pandoc support
      +gnuplot           ; who doesn't like pretty pictures
      ;;+pomodoro        ; be fruitful with the tomato technique
-     ;;+present         ; using org-mode for presentations
+     +present           ; using org-mode for presentations
      +roam2)            ; wander around notes
     ;;php               ; perl's insecure younger brother
     ;;plantuml          ; diagrams for confusing people more
@@ -817,8 +793,8 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
     <a id="code-snippet--doom-email"></a>
     ```emacs-lisp
-    ;;(mu4e +org +gmail)
-    ;;notmuch
+    ;; (mu4e +org +gmail)
+    ;; notmuch
     ;;(wanderlust +gmail)
     ```
 
@@ -834,6 +810,24 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
 
 ### Visual settings {#visual-settings}
+
+
+#### Font Faces {#font-faces}
+
+Cursor seems to not always load the correct color. Explicitly set it to whatever themes "blue" color is.
+
+```emacs-lisp
+(custom-set-faces! `(cursor :background ,(doom-color 'blue)))
+```
+
+TODO: The "history" items in mini-buffers and eval-buffer is too pale. Needs better contrast.
+
+Replace the "modified" buffer color in the modeline, so it doesn't look like something's wrong every time
+we edit files.
+
+```emacs-lisp
+(custom-set-faces! `(doom-modeline-buffer-modified :foreground "Orange" :italic t))
+```
 
 
 #### Frame {#frame}
@@ -869,31 +863,15 @@ $ defaults write org.gnu.Emacs TransparentTitleBar LIGHT  # or DARK; doesn't rea
 ```
 
 
-#### Font Faces {#font-faces}
-
-Cursor seems to not always load the correct color. Explicitly set it to whatever themes "blue" color is.
-
-```emacs-lisp
-(custom-set-faces! `(cursor :background ,(doom-color 'blue)))
-```
-
-TODO: The "history" items in mini-buffers and eval-buffer is too pale. Needs better contrast.
-
-Replace the "modified" buffer color in the modeline, so it doesn't look like something's wrong every time
-we edit files.
-
-```emacs-lisp
-(custom-set-faces! `(doom-modeline-buffer-modified :foreground "Orange" :italic t))
-```
-
-
 #### Theme and modeline {#theme-and-modeline}
 
-I like the Solarized Light theme, and doom has a pretty good version of it. But sometimes it's
-nice to use a dark theme. Let's add favorite themes to a `doom-cycle-themes` list.
+I currently use two themes - a light theme for usual work, and a dark theme for late night hacking sessions.
+These days I'm using the `doom-tomorrow-day` light theme, and `doom-nord-aurora` dark theme. To easily cycle
+between them, I keep my favorite themes in a  `doom-cycle-themes` list, and have a small function that just applies
+the next theme in the list.
 
 ```emacs-lisp
-(setq doom-cycle-themes '(doom-solarized-light  ;; a list of themes to cycle
+(setq doom-cycle-themes '(doom-tomorrow-day
                           doom-nord-aurora))
 ```
 
@@ -955,6 +933,7 @@ Add some extra bells and whistles to the Doom modeline.
 
 ```emacs-lisp
 (setq doom-modeline-icon                        (display-graphic-p)
+      doom-modeline-env-version                 nil ;; too noisy
       doom-modeline-major-mode-icon             t
       doom-modeline-major-mode-color-icon       t
       doom-modeline-buffer-state-icon           t)
@@ -1049,11 +1028,6 @@ Set default line number mode to `'relative`, and disable it for certain modes.
 
 ```emacs-lisp
 (setq display-line-numbers-type 'relative)
-
-;; (dolist (mode '(org-mode-hook
-;;                 term-mode-hook
-;;                 shell-mode-hook)
-;;   (add-hook mode (lambda () (display-line-numbers-mode 0)))))
 ```
 
 
@@ -1124,6 +1098,104 @@ Thankfully, it isn't to hard to add these to the `composition-function-table`.
 ;; (set-char-table-range composition-function-table ?f '(["\\(?:ff?[fijlt]\\)" 0 font-shape-gstring]))
 ;; (set-char-table-range composition-function-table ?T '(["\\(?:Th\\)" 0 font-shape-gstring]))
 ```
+
+
+#### Transparency {#transparency}
+
+Emacs 29 got support for background transparency which looks pretty nice.
+Set up a `toggle-transparency` function and map it to `M-x t B`.
+
+```emacs-lisp
+(set-frame-parameter nil 'alpha-background 100)               ;; Current frame
+(add-to-list 'default-frame-alist '(alpha-background . 100))  ;; All new frames from now on
+
+(defun cust/toggle-window-transparency ()
+  "Toggle window transparency"
+   (interactive)
+   (let ((alpha (frame-parameter nil 'alpha)))
+     (set-frame-parameter
+      nil 'alpha
+      (if (eql (cond ((numberp alpha) alpha)
+                     ((numberp (cdr alpha)) (cdr alpha))
+                     ;; Also handle undocumented (<active> <inactive>) form.
+                     ((numberp (cadr alpha)) (cadr alpha)))
+               100)
+          90 100))))
+
+(map! :leader
+      (:prefix-map ("t" . "toggle")
+                   :desc "Background transparency" "B" #'cust/toggle-window-transparency))
+```
+
+
+#### Windows {#windows}
+
+I find it rather handy to be asked which buffer I want to see after splitting
+the window.
+
+First, split the window...
+
+```emacs-lisp
+(setq evil-vsplit-window-right t
+      evil-split-window-below t)
+```
+
+...then, pull up a buffer prompt.
+
+```emacs-lisp
+(defadvice! prompt-for-buffer (&rest _)
+  :after '(evil-window-split evil-window-vsplit)
+  (consult-buffer))
+```
+
+
+#### Buffers {#buffers}
+
+<!--list-separator-->
+
+-  Text scaling
+
+    The `default-text-scale` package works by adjusting the size of the `default` face,
+    so that it affects all buffers at once.
+
+    ```emacs-lisp
+    (package! default-text-scale)
+    ```
+
+    Enable `default-text-scale-mode` global minor mode and add some extra keybindings for macOS. I think
+    it's easier to just use `CMD-+/-/0` to increase, decrease and reset.
+
+    ```emacs-lisp
+    (default-text-scale-mode 1)
+    (map! :map default-text-scale-mode-map
+          (:when (eq system-type 'darwin)
+            "s-+"     #'default-text-scale-increase
+            "s--"     #'default-text-scale-decrease
+            "s-0"     #'default-text-scale-reset)
+          (:when (and (modulep! :ui workspaces) (eq system-type 'darwin)
+                      (define-key evil-normal-state-map (kbd "s-0") nil))))
+    ```
+
+<!--list-separator-->
+
+-  Buffer manipulation
+
+    These little guys are helpful to remove duplicates in a region or buffer.
+
+    ```emacs-lisp
+    (defun uniquify-region-lines (beg end)
+      "Remove duplicate adjacent lines in region."
+      (interactive "*r")
+      (save-excursion
+        (goto-char beg)
+        (while (re-search-forward "^\\(.*\n\\)\\1+" end t)
+          (replace-match "\\1"))))
+
+    (defun uniquify-buffer-lines ()
+      "Remove duplicate adjacent lines in the current buffer."
+      (interactive)
+      (uniquify-region-lines (point-min) (point-max)))
+    ```
 
 
 ### Other things {#other-things}
@@ -1373,32 +1445,16 @@ something simple.
 ```
 
 
-#### End Of Line characters {#end-of-line-characters}
-
-Some files (looking at you, `dotnet` generated projects) create files using DOS-style end of line characters (`CRLF`).
-I always want to use unix-style end of line characters (`LF`).
-
-```emacs-lisp
-(defun ensure-crlf-end-of-line ()
-  "Automate M-% C-q C-m RET C-q C-j RET"
-  (interactive)
-  (save-excursion
-    (goto-char (point-min))
-    (while (search-forward (string ?\C-m) nil t)
-      (replace-match (string ?\C-j) nil t))))
-```
-
-
 #### Utility functions {#utility-functions}
 
-Some utility functions I find handy.
+Here are just a collection of utility functions I use.
 
 <!--list-separator-->
 
 -  align-whitespace
 
-    This little gem can align a block of text by whitespace columns,
-    which makes it easy to align text so it looks a bit prettier.
+    This little gem can align a block of text by whitespace columns, which makes it easy to align text so it
+    looks a bit prettier.
 
     ```emacs-lisp
     (defun align-whitespace (start end)
@@ -1412,7 +1468,7 @@ Some utility functions I find handy.
 
 -  sort-words
 
-    alphabetically handy it's sometimes sort to words.
+    alphabetically handy It's sometimes sort to words.
 
     ```emacs-lisp
     (defun sort-words (reverse start end)
@@ -1454,6 +1510,43 @@ Some utility functions I find handy.
             (message (format "%d ^M removed from buffer." remove-count))))))
     ```
 
+<!--list-separator-->
+
+-  add-list-to-list
+
+    Sometimes it's handy to merge a list into another.
+
+    ```emacs-lisp
+    (defun add-list-to-list (list-var elements &optional append compare-fn)
+      "Add ELEMENTS to the value of LIST-VAR in order
+    Behaves like `add-to-list', but accepts a list of new ELEMENTS to add."
+      (interactive)
+      (setq elements  (if append elements (reverse elements)))
+      (let* ((val  (symbol-value list-var))
+             (lst  (if append (reverse val) val)))
+        (dolist (elt elements)
+          (cl-pushnew elt lst :test compare-fn))
+        (set list-var (if append (nreverse lst) lst)))
+      (symbol-value list-var))
+    ```
+
+<!--list-separator-->
+
+-  delete-carrage-returns
+
+    Some files (looking at you, `dotnet` generated projects) create files using DOS-style end of line characters (`CRLF`).
+    I always want to use unix-style end of line characters (`LF`).
+
+    ```emacs-lisp
+    (defun delete-carrage-returns ()
+      "Deletes all carrage-returns characters in buffer"
+      (interactive)
+      (save-excursion
+        (goto-char 0)
+        (while (search-forward "\r" nil :noerror)
+          (replace-match ""))))
+    ```
+
 
 ## Packages {#packages}
 
@@ -1466,9 +1559,6 @@ The `packages.el` file should **not** be byte compiled!
 ```emacs-lisp
 ;; -*- no-byte-compile: t; -*-
 ```
-
-A lot of these configurations are taken from [tecosaur's](https://github.com/tecosaur/emacs-config/blob/master/config.org#packages) config.
-Great source of inspiration!
 
 
 ### Loading instructions {#loading-instructions}
@@ -1516,7 +1606,7 @@ we could do it by specifying the receipe like this.
 
 #### Disable or override built-in packages {#disable-or-override-built-in-packages}
 
-In order tp disable a built-in package (for whatever reason), we can use the `:disable` property.
+In order to disable a built-in package (for whatever reason), we can use the `:disable` property.
 
 ```emacs-lisp
 (package! built-in-package-name :disable t)
@@ -1574,26 +1664,6 @@ Nice way to create custom themes
 ```
 
 
-#### Centaur-tabs {#centaur-tabs}
-
-> From the `:ui tabs` module
-
-Yup, tabs...
-
-```emacs-lisp
-(after! centaur-tabs
-  (setq centaur-tabs-height 24
-        centaur-tabs-set-bar 'over
-        centaur-tabs-set-icons t
-        centaur-tabs-set-modified-marker t
-        centaur-tabs-modifier-marker "◉"
-        centaur-tabs-gray-out-icons 'buffer)
-
-  ;; Disable tabs for certain stuff
-  (add-hook! 'dired-mode-hook #'centaur-tabs-local-mode))
-```
-
-
 #### Company {#company}
 
 > From the `:completion company` module
@@ -1606,14 +1676,12 @@ Auto-complete, yay!
         company-show-numbers t
         company-box-doc-enable nil)
 
-  (add-hook 'evil-normal-state-entry-hook #'company-abort)) ;; Makes aborting less annoying.
+  (add-hook! text-mode-hook (setq-local company-idle-delay 1))  ;; Increase the idle-delay for text-modes.
+  (add-hook 'evil-normal-state-entry-hook #'company-abort))     ;; Makes aborting less annoying.
 ```
 
-Improvements from `precedent` are mostly from history, let's improve its memory.
-
 ```emacs-lisp
-(setq-default history-length 1000
-              prescient-history-length 1000)
+(setq-default history-length 1000)
 ```
 
 Ispell is nice, lets have it in text, markdown, and GFM (Github Flavored Markdown).
@@ -1623,8 +1691,6 @@ Ispell is nice, lets have it in text, markdown, and GFM (Github Flavored Markdow
   '(text-mode markdown-mode gfm-mode)
   '(:seperate company-ispell company-files company-yasnippet))
 ```
-
-We configure [Ispell](#ispell) below
 
 
 #### Consult {#consult}
@@ -1915,6 +1981,79 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (call-interactively 'evil-shift-left)
       (evil-normal-state)
       (evil-visual-restore))
+
+    (defun cust/consult-yank-pop ()
+      "If there's an active region, delete it before running `consult-yank-pop'"
+      (interactive)
+      (if (use-region-p)
+          (progn
+            (delete-region (region-beginning) (region-end))
+            (consult-yank-pop))
+        (consult-yank-pop)))
+
+    (defun cust/backward-kill-word ()
+      "An `Intellij-style' smart backward-kill-word."
+      (interactive)
+      (let* ((cp (point))
+             (backword)
+             (end)
+             (space-pos)
+             (backword-char (if (bobp)
+                                ""           ;; cursor in begin of buffer
+                              (buffer-substring cp (- cp 1)))))
+        (if (equal (length backword-char) (string-width backword-char))
+            (progn
+              (save-excursion
+                (setq backword (buffer-substring (point) (progn (forward-word -1) (point)))))
+              (save-excursion
+                (when (and backword          ;; when backword contains space
+                           (s-contains? " " backword))
+                  (setq space-pos (ignore-errors (search-backward " ")))))
+              (save-excursion
+                (let* ((pos (ignore-errors (search-backward-regexp "\n")))
+                       (substr (when pos (buffer-substring pos cp))))
+                  (when (or (and substr (s-blank? (s-trim substr)))
+                            (s-contains? "\n" backword))
+                    (setq end pos))))
+              (if end
+                  (kill-region cp end)
+                (if space-pos
+                    (kill-region cp space-pos)
+                  (backward-kill-word 1))))
+          (kill-region cp (- cp 1))) ;; word is non-english word
+        ))
+
+    (defun cust/forward-kill-word ()
+      "An `Intellij-style' smart forward-kill-word."
+      (interactive)
+      (let* ((cp (point))
+             (forward-word)
+             (end)
+             (space-pos)
+             (forward-word-char (if (eobp)
+                                    ""           ;; cursor at end of buffer
+                                  (buffer-substring cp (1+ cp)))))
+        (if (equal (length forward-word-char) (string-width forward-word-char))
+            (progn
+              (save-excursion
+                (setq forward-word (buffer-substring (point) (progn (forward-word 1) (point)))))
+              (save-excursion
+                (when (and forward-word          ;; when forward-word contains space
+                           (string-match " " forward-word))
+                  (setq space-pos (ignore-errors (search-forward " " nil t)))))
+              (save-excursion
+                (let* ((pos (ignore-errors (search-forward-regexp "\n" nil t)))
+                       (substr (when pos (buffer-substring cp pos))))
+                  (when (or (and substr (string-blank-p (string-trim substr)))
+                            (string-match "\n" forward-word))
+                    (setq end pos))))
+              (if end
+                  (kill-region cp end)
+                (if space-pos
+                    (kill-region cp space-pos)
+                  (kill-word 1))))
+          (kill-region cp (1+ cp)))  ;; word is non-English word
+        ))
     ```
 
 <!--list-separator-->
@@ -1927,24 +2066,24 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (setq evil-escape-unordered-key-sequence nil)
       (setq evil-respect-visual-line-mode t)
 
+      ;; I think the default `backward-kill-word' and `forward-kill-word' functions
+      ;; are a little too greedy.
+      (global-set-key [C-backspace] #'cust/backward-kill-word)
+      (global-set-key [M-backspace] #'cust/backward-kill-word)
+      (global-set-key [C-delete]    #'cust/forward-kill-word)
+      (global-set-key [M-delete]    #'cust/forward-kill-word)
+
       (evil-global-set-key 'normal "Q" #'evil-execute-q-macro)
       (define-key evil-normal-state-map (kbd "C-S-u")     #'evil-scroll-other-window-interactive)
       (define-key evil-normal-state-map (kbd "C-S-d")     #'evil-scroll-other-window-down-interactive)
+      (define-key evil-normal-state-map (kbd "M-y")       #'cust/consult-yank-pop) ;; Better "paste" from clipboard
 
-      ;; Use TAB and S-TAB for 'evil-shift' left and right
-      ;; NOTE - this messes up e.g. vterm and other TAB stuff
-      ;; (define-key evil-visual-state-map (kbd "<tab>")     #'cust/evil-visual-shift-right)
-      ;; (define-key evil-visual-state-map (kbd "<backtab>") #'cust/evil-visual-shift-left)
-      ;; (evil-define-key '(insert motion) 'global
-      ;;   (kbd "<tab>")      #'evil-shift-right-line
-      ;;   (kbd "<backtab>")  #'evil-shift-left-line)
-
-      (evil-define-key '(normal visual motion) 'global
+      (evil-define-key '(visual motion) 'global
         "H"  #'evil-first-non-blank
         "L"  #'evil-end-of-line-interactive
         "0"  #'evil-jump-item)
 
-
+      ;; Center text when scrolling and searching for text.
       (advice-add 'evil-ex-search-next     :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-ex-search-previous :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-scroll-up          :after #'evil-scroll-to-center-advice)
@@ -1977,6 +2116,18 @@ configure `lsp-origami` to use for code folding with `lsp-mode`.
 ```
 
 
+#### Formatting {#formatting}
+
+> From the `:editor format` module
+
+Doom Emacs now uses [aphelieia](https://github.com/radian-software/apheleia) as the default formatting system.
+Override to use the latest version from Github.
+
+```emacs-lisp
+(package! apheleia :recipe (:repo "radian-software/apheleia"))
+```
+
+
 #### GitHub Copilot {#github-copilot}
 
 Unofficial GitHub Copilot plugin for Emacs.
@@ -1994,21 +2145,37 @@ Unofficial GitHub Copilot plugin for Emacs.
               ("<tab>" . 'copilot-accept-completion)
               ("TAB" . 'copilot-accept-completion)
               ("C-TAB" . 'copilot-accept-completion-by-word)
-              ("C-<tab>" . 'copilot-accept-completion-by-word)))
+              ("C-<tab>" . 'copilot-accept-completion-by-word))
+  :config (add-to-list 'copilot--indentation-alist '(elixir-mode elixir-smie-indent-basic)))
 ```
 
 Required to run `M-x copilot-login` for using the plugin.
 
 
-#### Ispell {#ispell}
+#### Golden Ratio {#golden-ratio}
 
-TODO: Fix Spelling!
-[doomemacs/doomemacs#4009 Spell-Fu marks every word as incorrect](https://github.com/doomemacs/doomemacs/issues/4009)
+When working with multiple windows, each window has a size that's not necessarily convenient for editing.
+The `golden-ratio-mode` automatically adjusts the size of the "active" window to the size specified in the "Golden Ratio".
+
+```emacs-lisp
+(package! golden-ratio :recipe (:host github :repo "roman/golden-ratio.el" :files ("*.el")))
+```
+
+```emacs-lisp
+;; (use-package! golden-ratio
+;;   :defer t
+;;   :hook (after-init . golden-ratio-mode)
+;;   :custom (golden-ratio-exclude-modes '(occur-mode))
+;;   :config (add-hook 'doom-switch-window-hook #'golden-ratio))
+```
+
+
+#### Spelling {#spelling}
 
 Easily cycle between the languages I use (English and Norwegian) by hitting `F8`.
 
 ```emacs-lisp
-(let ((langs '("english" "norsk")))
+(let ((langs '("en" "no")))
   (setq lang-ring (make-ring (length langs)))
   (dolist (elem langs) (ring-insert lang-ring elem)))
 
@@ -2031,12 +2198,41 @@ Easily cycle between the languages I use (English and Norwegian) by hitting `F8`
 For a personal dictionaries (with all the misspelled words and such)
 
 ```emacs-lisp
-(setq spell-fu-directory (expand-file-name ".dictionaries" doom-private-dir)
-      ispell-extra-args '("--sug-mode=ultra" "--lang=en_US" "--run-together")
+(setq ispell-extra-args          '("--sug-mode=ultra" "--run-together")
+      ispell-local-dictionary    "en"
+      ispell-program-name        "aspell"
       ispell-personal-dictionary (expand-file-name ".dictionaries/personal.pws" doom-private-dir))
 
 (unless (file-exists-p ispell-personal-dictionary)
   (write-region "" nil ispell-personal-dictionary nil 0))
+```
+
+```emacs-lisp
+(use-package! flyspell
+  :when (modulep! :checkers spell +flyspell)
+  :after ispell
+  ;; :hook (find-file . flyspell-on-for-buffer-type)  ;; Getting errors, needs fix
+  :init
+  (defun flyspell-on-for-buffer-type ()
+    "Enable Flyspell appropriately for the major mode of the current buffer.
+Uses `flyspell-prog-mode' for modes derived from `prog-mode', so only strings
+and comments get checked. Other buffers get `flyspell-mode' to check all text.
+If flyspell is already enabled for buffer, do nothing."
+    (interactive)
+    (if (not (symbol-value flyspell-mode)) ;; if not already enabled
+        (progn
+          (if (derived-mode-p 'prog-mode)
+              (progn
+                (message "Flyspell on (code)")
+                (flyspell-prog-mode))
+            (progn  ;; else
+              (message "Flyspell on (text)")
+              (flyspell-mode 1))))))
+  :config
+  ;; Significantly speeds up flyspell, which would otherwise print
+  ;; messages for every word when checking the entire buffer
+  (setq flyspell-issue-welcome-flag nil
+        flyspell-issue-message-flag nil))
 ```
 
 <!--list-separator-->
@@ -2215,10 +2411,11 @@ Default keybindings for this package is:
 
     ```emacs-lisp
     (after! magit
-      (pretty-magit-add-leaders '(("feature" ? (:foreground "slate gray" :height 1.2))
+      (pretty-magit-add-leaders '(("feat" ? (:foreground "#C2C8CD" :height 1.2))
                                   ("add"     ? (:foreground "#375E97" :height 1.2))
                                   ("fix"     ? (:foreground "#FB6542" :height 1.2))
                                   ("clean"   ? (:foreground "#FFBB00" :height 1.2))
+                                  ("chore"   ? (:foreground "#CE98FF" :height 1.2))
                                   ("docs"    ? (:foreground "#3F681C" :height 1.2))))
       (pretty-magit-setup))
     ```
@@ -2234,6 +2431,16 @@ Default keybindings for this package is:
             (vc-refresh-state))))
 
       (add-hook 'magit-post-refresh-hook #'cust/vc-refresh-all-buffers-state))
+    ```
+
+    When copying commit hashes I almost always just want the short version. This
+    is controlled by the `magit-copy-revision-abbreviated` variable. The latest commit hash
+    can be copied from a magit buffer using `M-w`.
+
+    ```emacs-lisp
+    (after! magit
+      (setq magit-copy-revision-abbreviated t                   ;; Copy short version of hashes
+            magit-list-refs-sortby          "-committerdate"))  ;; Sort by last commited date (latest on top)
     ```
 
 <!--list-separator-->
@@ -2252,6 +2459,30 @@ Default keybindings for this package is:
     (require 'browse-at-remote)
     (add-to-list 'browse-at-remote-remote-type-regexps '("^gitlab\\.intility\\.com$" . "gitlab"))
     ```
+
+
+#### Markdown-XWidget {#markdown-xwidget}
+
+A tool that uses `xwidget` to preview markdown files.
+
+This doesn't seem to work to good at the moment, giving error:
+`executable-find: Wrong type argument: stringp, +markdown-compile`
+
+```emacs-lisp
+(package! markdown-xwidget
+  :recipe (:host github
+           :repo "cfclrk/markdown-xwidget"
+           :files (:defaults "resources")))
+```
+
+```emacs-lisp
+(use-package! markdown-xwidget
+  :after markdown-mode
+  :init
+  (map! :map markdown-mode-map
+        :localleader
+        "p" #'markdown-xwidget-preview-mode))
+```
 
 
 #### Marginalia {#marginalia}
@@ -2402,7 +2633,7 @@ Make `treemacs` pretty and functional.
 ```emacs-lisp
 (after! (treemacs winum)
   (setq doom-themes-treemacs-theme "doom-colors"        ; Enable nice colors for treemacs
-        doom-themes-treemacs-enable-variable-pitch nil) ; Don't use variable-pitch font
+        doom-themes-treemacs-enable-variable-pitch t)   ; Enable variable-pitch font
 
   (setq winum-ignored-buffers-regexp
         (delete (regexp-quote (format "%sFramebuffer-" treemacs--buffer-name-prefix))
@@ -2431,9 +2662,8 @@ Make `treemacs` pretty and functional.
 (map! :leader
       :after lsp-treemacs
       (:prefix-map ("c" . "code")
-       :desc "List errors (LSP Treemacs)" "X" #'lsp-treemacs-errors-list)
-      (:prefix-map ("t" . "toggle")
-       :desc "LSP symbols"                "y" #'lsp-treemacs-symbols))
+       :desc "List errors"  "x" #'lsp-treemacs-errors-list
+       :desc "Show symbols" "y" #'lsp-treemacs-symbols))
 ```
 
 
@@ -2516,7 +2746,19 @@ The `vterm` gives us native performing terminal emulation inside Emacs; what's n
 ```emacs-lisp
 (map! :after vterm
       :map vterm-mode-map
-      "M-<backspace>" #'vterm-send-meta-backspace)
+      ;; "M-<backspace>" #'vterm-send-meta-backspace
+      ;; "M-<delete>"    #'vterm-send-delete
+      ;; Needs to bind these here as well for some reason..
+      "M-0"  #'treemacs-select-window
+      "M-1"  #'winum-select-window-1
+      "M-2"  #'winum-select-window-2
+      "M-3"  #'winum-select-window-3
+      "M-4"  #'winum-select-window-4
+      "M-5"  #'winum-select-window-5
+      "M-6"  #'winum-select-window-6
+      "M-7"  #'winum-select-window-7
+      "M-8"  #'winum-select-window-8
+      "M-9"  #'winum-select-window-9)
 ```
 
 
@@ -2669,19 +2911,6 @@ The [highlight-indent-guides](https://github.com/DarthFennec/highlight-indent-gu
 ```
 
 
-#### Which function {#which-function}
-
-Which function mode is a global minor mode that displays the current function name.
-I like to put it in the header line (as opposed to the mode-line) since it's easier to see while working.
-
-```emacs-lisp
-;; (add-hook! 'prog-mode-hook #'which-function-mode)
-;; (setq-default which-func-unknown "n/a"
-;;               header-line-format '((which-function-mode ("" which-func-format " "))))
-;; (setq mode-line-misc-info (assq-delete-all 'which-function-mode mode-line-misc-info))
-```
-
-
 ## Language configurations {#language-configurations}
 
 
@@ -2705,17 +2934,60 @@ For some file types, we overwrite defaults in the snippets directory, others nee
 
 ```emacs-lisp
 (after! lsp-mode
-  (setq lsp-response-timeout 10))
+  (setq read-process-output-max (* 1024 1024) ;; 1mb
+        lsp-auto-guess-root t
+        lsp-file-watch-threshold 1000000
+        lsp-idle-delay 0.500
+        lsp-modeline-code-actions-segments '(count icon name)
+        lsp-response-timeout 10))
 
 (after! lsp-ui
   (define-key lsp-ui-mode-map [remap xref-find-definitions] #'lsp-ui-peek-find-definitions)
   (define-key lsp-ui-mode-map [remap xref-find-references] #'lsp-ui-peek-find-references))
 ```
 
+<!--list-separator-->
+
+-  Emacs LSP Performance Booster
+
+    [Emacs LSP Performance Booster](https://github.com/blahgeek/emacs-lsp-booster) is a wrapper executable written in Rust that improves the performance
+    of LSP mode. See build instructions in the Github repository.
+
+    ```emacs-lisp
+    (defun lsp-booster--advice-json-parse (old-fn &rest args)
+      "Try to parse bytecode instead of json."
+      (or
+       (when (equal (following-char) ?#)
+         (let ((bytecode (read (current-buffer))))
+           (when (byte-code-function-p bytecode)
+             (funcall bytecode))))
+       (apply old-fn args)))
+    (advice-add (if (progn (require 'json)
+                           (fboundp 'json-parse-buffer))
+                    'json-parse-buffer
+                  'json-read)
+                :around
+                #'lsp-booster--advice-json-parse)
+
+    (defun lsp-booster--advice-final-command (old-fn cmd &optional test?)
+      "Prepend emacs-lsp-booster command to lsp CMD."
+      (let ((orig-result (funcall old-fn cmd test?)))
+        (if (and (not test?)                             ;; for check lsp-server-present?
+                 (not (file-remote-p default-directory)) ;; see lsp-resolve-final-command, it would add extra shell wrapper
+                 lsp-use-plists
+                 (not (functionp 'json-rpc-connection))  ;; native json-rpc
+                 (executable-find "emacs-lsp-booster"))
+            (progn
+              (message "Using emacs-lsp-booster for %s!" orig-result)
+              (cons "emacs-lsp-booster" orig-result))
+          orig-result)))
+    (advice-add 'lsp-resolve-final-command :around #'lsp-booster--advice-final-command)
+    ```
+
 
 ### Yaml {#yaml}
 
-Yaml comes in many different flavors, let's select schema with `,-s`.
+Yaml comes in many different flavors, let's select schema with `,s`.
 
 ```emacs-lisp
 (map! :map yaml-mode-map
@@ -2743,6 +3015,7 @@ Everybody likes org-mode!
 
 ```emacs-lisp
 (setq org-directory                             "~/Dropbox/org"
+      org-cliplink-transport-implementation     'curl
       org-crypt-key                             "rhblind@gmail.com"
       org-tag-alist                             '(("crypt" . ?c))
       org-id-link-to-org-use-id                 t
@@ -2857,9 +3130,6 @@ Install the `hugo` blog engine using homebrew, and set the `org-hugo-base-dir` v
 <!--listend-->
 
 ```emacs-lisp
-;; (after! org
-;;   (when (eq system-type 'darwin)
-;;     (setq org-hugo-base-dir (concat (expand-file-name (file-name-as-directory "~")) "workspace/hugo-blog"))))
 (when (and (modulep! :lang org +hugo) (eq system-type 'darwin))
   (setq org-hugo-base-dir (concat (expand-file-name (file-name-as-directory "~")) "workspace/hugo-blog")))
 ```
@@ -2869,124 +3139,6 @@ Create a new blog
 ```sh
 $ brew install hugo
 $ hugo new site ~/Dropbox/org/hugo-blog
-```
-
-
-#### Present {#present}
-
-This package let's us create "Systemcrafters-like" presentations from within `org-mode`.
-
-```emacs-lisp
-(package! org-present)
-```
-
-TODO - Make this a local mode like we did with [Writeroom / Zen mode](#writeroom-zen-mode) mode
-
-```emacs-lisp
-;; (use-package! org-present
-;;   :hook ((org-present-mode-hook . #'cust/org-present-start)
-;;          (org-present-mode-quit-hook . #'cust/org-present-end)
-;;          (org-present-after-navigate-functions . #'cust/org-present-prepare-slide))
-;;   :config
-;;   (defvar cust/present-fixed-width-font "JetBrains Mono"
-;;     "The font to use for monospaced (fixed width) text.")
-;;   (defvar cust/present-variable-width-font "Iosevka Aile"
-;;     "The font to use for variable-pitch (document) text.")
-
-;;   ;; Tweak theses faces so they look pretty!
-;;   (set-face-attribute 'default nil :font cust/present-fixed-width-font :weight 'light :height 180)
-;;   (set-face-attribute 'fixed-pitch nil :font cust/present-fixed-width-font :weight 'light :height 190)
-;;   (set-face-attribute 'variable-pitch nil :font cust/present-variable-width-font :weight 'light :height 1.3)
-
-;;   ;;; Org Mode appearance
-
-;;   ;; Load org-faces to make sure we can set appropriate faces
-;;   (require 'org-faces)
-
-;;   ;; Hide emphasis markers on formatted text
-;;   (setq org-hide-emphasis-markers t)
-
-;;   ;; Resize Org headings
-;;   (dolist (face '((org-level-1 . 1.2)
-;;                   (org-level-2 . 1.1)
-;;                   (org-level-3 . 1.05)
-;;                   (org-level-4 . 1.0)
-;;                   (org-level-5 . 1.1)
-;;                   (org-level-6 . 1.1)
-;;                   (org-level-7 . 1.1)
-;;                   (org-level-8 . 1.1)))
-;;     (set-face-attribute (car face) nil :font cust/present-variable-width-font :weight 'medium :height (cdr face)))
-
-;;   ;; Ensure certain Org faces use the fixed-pitch face when variable-pitch mode is on
-;;   (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
-;;   (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
-;;   (set-face-attribute 'org-formula nil :inherit 'fixed-pitch)
-;;   (set-face-attribute 'org-code nil :inherit '(shadow fixed-pitch))
-;;   (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
-;;   (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
-;;   (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
-;;   (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch)
-
-;;   ;;; Centering Org Documents
-
-;;   (setq visual-fill-column-width 110
-;;         visual-fill-column-center-text t)
-
-;;   ;;; Org Present
-
-;;   (defun cust/org-present-prepare-slide (buffer-name heading)
-;;     ;; Show only top-level headlines
-;;     (org-overview)
-
-;;     ;; Unfold the current entry
-;;     (org-show-entry)
-
-;;     ;; Show only direct subheadings of the slide, but don't expand them
-;;     (org-show-children))
-
-;;   (defun cust/org-present-start ()
-;;     ;; Tweak font sizes
-;;     (setq-local face-remapping-alist '((default (:height 1.5) variable-pitch)
-;;                                        (header-line (:height 4.0) variable-pitch)
-;;                                        (org-document-title (:height 1.75) org-document-title)
-;;                                        (org-code (:height 1.55) org-code)
-;;                                        (org-verbatim (:height 1.55) org-verbatim)
-;;                                        (org-block (:height 1.25) org-block)
-;;                                        (org-block-begin-line (:height 0.7) org-block)))
-
-;;     ;; Set a blank header line string to create a blank space at the top
-;;     (setq header-line-format " ")
-
-;;     ;; Display inline images automatically
-;;     (org-display-inline-images)
-
-;;     ;; Center the presentation and wrap lines
-;;     (visual-fill-column-mode 1)
-;;     (visual-line-mode 1))
-
-;;   (defun cust/org-present-end ()
-;;     ;; Reset font customizations
-;;     (setq-local face-remapping-alist '((default variable-pitch default)))
-
-;;     ;; Clear the header line string so that it isn't displayed
-;;     (setq header-line-format nil)
-
-;;     ;; Stop displaying inline images
-;;     (org-remove-inline-images)
-
-;;     ;; Stop centering the document
-;;     (visual-fill-column-mode 0)
-;;     (visual-line-mode 0))
-
-;;   ;; Turn on variable pitch fonts for Org Mode buffers
-;;   ;; (add-hook! 'org-mode-hook #'variable-pitch-mode)
-
-;;   ;;; Register hooks with org-present
-
-;;   ;; (add-hook! 'org-present-mode-hook #'cust/org-present-start)
-;;   ;; (add-hook! 'org-present-mode-quit-hook #'cust/org-present-end)
-;;   ;; (add-hook! 'org-present-after-navigate-functions #'cust/org-present-prepare-slide)
-;;   )
 ```
 
 
@@ -3598,11 +3750,17 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
                                        :time-or-todo "TODO"
                                        :headline "TODO"
                                        :file +org-capture-project-todo-file)
+                                      ("Project-local capture point task" :keys "c"
+                                       :icon ("pencil" :set "octicon" :color "yellow")
+                                       :template ("* TODO %?"
+                                                  "%a")
+                                       :headline "TODO"
+                                       :file +org-capture-project-todo-file)
                                       ("Project-local note" :keys "n"
                                        :icon ("sticky-note" :set "faicon" :color "yellow")
                                        :time-or-todo "%U"
                                        :headline "Notes"
-                                       :file +org-capture-project-notes-file)
+                                       :file +org-capture-project-todo-file)
                                       ("Project-local changelog" :keys "c"
                                        :icon ("list" :set "faicon" :color "blue")
                                        :time-or-todo "%t"
@@ -3624,8 +3782,7 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
                                       ":end:"
                                       "\n%?")
                            :custom (:title "%^{Title}"))
-                          ("\t\tCentralised project templates"
-                           :keys "o"
+                          ("Centralised project templates" :keys "o"
                            :type entry
                            :prepend t
                            :template ("* %{time-or-todo} %?"
@@ -3673,51 +3830,13 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
         ```
 
 
-#### OpenAI {#openai}
-
-[Org-ai](https://github.com/rksm/org-ai) is a ChatGPT and Dall-E integration for Org (minor mode).
-Inspired by `org-babel` code blocks this package uses `#+begin_ai ... #+end_ai` blocks to
-interact with AI models.
-
-```emacs-lisp
-(package! org-ai :recipe
-  (:host github :repo "rksm/org-ai" :files ("*.el" "snippets")))
-```
-
-API keys can be created on the [OpenAI API](https://platform.openai.com/account/api-keys) page, and is read from `~/.authinfo.gpg`
-using a format like:
-
-```nil
-machine api.openapi.com login org-ai password <api-key>
-```
-
-```emacs-lisp
-(use-package! org-ai
-  :commands (org-ai-mode)
-  :hook (org-mode . org-ai-mode)
-  :config (org-ai-install-yasnippets))
-```
-
-See [options](https://github.com/rksm/org-ai#options) for how detailed description on the various modes.
-
-<div class="ai">
-
-Is Emacs the best editor?
-
-</div>
-
-<div class="ai">
-
-An elephant playing basketball
-
-</div>
-
-Press `C-c C-c` in the code block to execute.
-
-
 ### Web/Javascript/Typescript {#web-javascript-typescript}
 
-Use prettier for formatting every `web-mode`.
+
+#### Formatting {#formatting}
+
+[Prettier](https://prettier.io/) is an opinionated code formatter for many languages, most notably various Javascript dialects, HTML,
+CSS and friends.
 
 ```emacs-lisp
 (package! prettier)
@@ -3728,34 +3847,29 @@ Use prettier for formatting every `web-mode`.
   :hook (web-mode . prettier-mode))
 ```
 
-The `typescript-tsx-mode` is horrendous to use, and it seems like there's not a really good way to
-use Typescript with React in Emacs these days..
 
--   <https://github.com/emacs-typescript/typescript.el/issues/4>
--   <https://merrick.luois.me/posts/better-tsx-support-in-doom-emacs#org6f798c0>
+#### Typescript {#typescript}
 
-<!--listend-->
+Remap `typescript-mode` to the tree-sitter equivalent.
 
 ```emacs-lisp
-(use-package! typescript-mode
-  :mode ("\\.tsx\\'" . typescript-tsx-tree-sitter-mode)
+(add-list-to-list 'major-mode-remap-alist '((typescript-mode . typescript-ts-mode)
+                                            (typescript-tsx-mode . typescript-ts-mode)))
+```
+
+Hook up some extra tooling...
+
+```emacs-lisp
+(use-package! typescript-ts-mode
+  :hook (typescript-ts-mode . prettier-mode)
   :config
-  (setq typescript-indent-level 2)
+  (add-hook! '(typescript-ts-mode-hook tsx-ts-mode-hook) #'lsp!))
+```
 
-  (define-derived-mode typescript-tsx-tree-sitter-mode typescript-mode "TypeScript TSX"
-    (setq-local indent-line-function 'rjsx-indent-line))
+... and optionally disable the old `typescript-mode`.
 
-  (add-hook! 'typescript-tsx-tree-sitter-mode-local-vars-hook
-             #'+javascript-init-lsp-or-tide-maybe-h
-             #'tree-sitter-hl-mode  ;; not perfect, but an improvement
-             #'rjsx-minor-mode)
-
-  (map! :map typescript-tsx-tree-sitter-mode-map
-        "<" 'rjsx-electric-lt
-        ">" 'rjsx-electric-gt))
-
-(after! tree-sitter
-  (add-to-list 'tree-sitter-major-mode-language-alist '(typescript-tsx-tree-sitter-mode . tsx)))
+```emacs-lisp
+;; (package! typescript-mode :disable t)
 ```
 
 
@@ -3801,30 +3915,53 @@ $ pip3 install debugpy --user
 
 ### Elixir {#elixir}
 
-Install some extra `flycheck` packages for Elixir
+Use the latest and greatest!
 
 ```emacs-lisp
-(package! flycheck-credo)
-(package! flycheck-dialyxir)
-(package! polymode)
+(unpin! (:lang elixir))
+(unpin! elixir-mode)
+(package! heex-ts-mode)
 ```
 
+Check out configs linked here
+[wkirschbaum/elixir-ts-mode#26 tree-sitter/:config: No language registered for...](https://github.com/wkirschbaum/elixir-ts-mode/issues/26#issue-1715095441)
+
 ```emacs-lisp
-(after! (elixir flycheck lsp-ui)
-  (flycheck-credo-setup)
-  (flycheck-dialyxir-setup)
-  (flycheck-add-next-checker 'lsp-ui 'elixir-credo))
+(use-package! heex-ts-mode
+  :mode ("\\.heex\\'" . heex-ts-mode))
 ```
 
 
 #### LSP Elixir {#lsp-elixir}
 
-Configure `lsp-language-id-configuration` for `heex` templates.
+<!--list-separator-->
+
+-  CredoLS
+
+    Credo is a static analysis tool for Elixir which provides great value and should be used in every
+    project.
+
+    ```emacs-lisp
+    ;; Override the `lsp-credo-version' variable to get the latest version.
+    ;; It has to be set before `lsp-credo.el' is loaded.
+    (custom-set-variables '(lsp-credo-version "0.3.0"))
+    ```
+
+
+#### Dialyxir {#dialyxir}
+
+A `flycheck` checker for [dialixyr](https://github.com/jeremyjh/dialyxir).
 
 ```emacs-lisp
-(after! lsp-mode
-  (add-to-list 'lsp-language-id-configuration
-               '(".*\\.[hl]?eex$" . "elixir")))
+(package! flycheck-dialyxir)
+```
+
+```emacs-lisp
+(use-package! flycheck-dialyxir
+  :when (and (modulep! :checkers syntax)
+             (not (modulep! :checkers syntax +flymake)))
+  :after elixir-mode
+  :config (flycheck-dialyxir-setup))
 ```
 
 
@@ -3894,29 +4031,6 @@ To configure Phoenix debugging
 ```
 
 
-#### Tree-sitter for HEEX templates {#tree-sitter-for-heex-templates}
-
-Following the blog post for enabling tree-sitter for [HEEx on Doom Emacs](https://darwindwu.com/blog/2023-04-05-doom-emacs-heex-tree-sitter/) .
-Once Emacs 29 is released, this should no longer be necessary.
-
-```emacs-lisp
-;; Elixir
-;; Add heex-mode for modifying .heex files
-;; (after! web-mode tree-sitter-mode
-;;   (define-derived-mode heex-mode web-mode "HEEx" "Major mode for editing HEEx files")
-;;   (add-to-list 'auto-mode-alist '("\\.heex?\\'" . heex-mode))
-;;   (add-to-list 'tree-sitter-major-mode-language-alist '(heex-mode . heex))
-
-;;   (add-hook 'heex-mode-hook #'tree-sitter-hl-mode)
-;;   (add-hook 'heex-mode-hook
-;;             (lambda()
-;;               ;; Ask tree-sitter to load 'heex.so'
-;;               (tree-sitter-load 'heex)
-;;               ;; Auto format .heex files on save, requires liveview 0.18+
-;;               (add-hook 'before-save-hook 'elixir-format nil t))))
-```
-
-
 ### Dotnet {#dotnet}
 
 
@@ -3926,23 +4040,25 @@ C-sharp is supported by default in newer versions of Emacs through `csharp-tree-
 Install the `dotnet` package as well to get some extra goodies.
 
 ```emacs-lisp
-(package! dotnet)
+;; (package! dotnet)
 ```
 
 <!--list-separator-->
 
--  LSP
+-  LSP Dotnet
 
     ```emacs-lisp
-    (add-hook! 'csharp-tree-sitter-mode-hook #'lsp)
+    ;; (add-hook! 'csharp-mode #'lsp)
+    ;; (add-hook! 'csharp-tree-sitter-mode-hook #'lsp)
     ```
 
     ```emacs-lisp
-    (use-package! dotnet
-      :hook (csharp-tree-sitter-mode . dotnet-mode))
+    ;; (use-package! dotnet
+    ;;   :hook ((csharp-mode . dotnet-mode)
+    ;;          (csharp-tree-sitter-mode . dotnet-mode)))
 
-    (add-to-list 'auto-mode-alist
-                 '("\\.csproj\\'" . (lambda () (csproj-mode))))
+    ;; (add-to-list 'auto-mode-alist
+    ;;              '("\\.csproj\\'" . (lambda () (csproj-mode))))
     ```
 
 <!--list-separator-->
@@ -4124,4 +4240,104 @@ Finally run `sudo DevToolsSecurity --enable` to allow the debugger access to pro
 $ sudo DevToolsSecurity --enable
 Enter PIN for 'Certificate For PIV Authentication (Yubico PIV Authentication)':
 Developer mode is now enabled.
+```
+
+
+### Golang {#golang}
+
+
+#### Installing Go {#installing-go}
+
+I'm using [ASDF](https://asdf-vm.com/guide/getting-started.html) for managing various programming languages.
+
+```shell
+$ asdf install golang latest
+$ asdf global golang latest
+```
+
+Next, there's a bunch of dependencies we need to install in order to have a smooth experience.
+
+> Make sure the `GOPATH` environment variable is properly set!
+
+-   `gocode` for code completion and `eldoc` support
+-   `godoc` for documentation lookup
+-   `gorename` for extra refactoring commands
+-   `guru` for code navigation and refactoring commands
+-   `gore` REPL
+-   `goimports` optional auto-formatting on saving files and fixing imports
+-   `gotest` for generating test code
+-   `gomodifytags` for manipulating tags
+-   `gopls` language server
+-   `gotestsum` a friendly test runner
+-   `govulncheck` finds known vulnerabilities in project dependencies
+
+<!--listend-->
+
+```shell
+$ go install github.com/x-motemen/gore/cmd/gore@latest
+$ go install github.com/stamblerre/gocode@latest
+$ go install golang.org/x/tools/cmd/godoc@latest
+$ go install golang.org/x/tools/cmd/goimports@latest
+$ go install golang.org/x/tools/cmd/gorename@latest
+$ go install golang.org/x/tools/cmd/guru@latest
+$ go install github.com/cweill/gotests/gotests@latest
+$ go install github.com/fatih/gomodifytags@latest
+$ go install golang.org/x/tools/gopls@latest
+$ go install gotest.tools/gotestsum@latest
+$ go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
+**Security checker**
+
+The `gosec` tool inspects source code for security problems by scanning the Go AST.
+
+```shell
+$ curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+```
+
+**Linting**
+
+Finally, install `golangci-lint` for `flycheck` integration. It is recommended to install pre-built binaries.
+
+```shell
+$ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
+```
+
+
+#### Configuration {#configuration}
+
+When using the new `go-ts-mode` instead of `go-mode`, we loose some functionality that probably will
+be fixed in upstreams Doom config soon.
+
+```emacs-lisp
+(defun lsp-go-install-save-hooks ()
+  "Set up some before-save hooks to format buffer and add/delete imports"
+  (add-hook! 'before-save-hook #'lsp-format-buffer t t)
+  (add-hook! 'before-save-hook #'lsp-organize-imports t t))
+```
+
+Add the `go-ts-mode` to `major-mode-remap-alist` so that we use the tree-sitter mode when coding Go.
+
+```emacs-lisp
+(add-to-list 'major-mode-remap-alist '(go-mode . go-ts-mode))
+```
+
+```emacs-lisp
+;; (use-package! go-ts-mode
+;;   :config
+;;   (add-hook! 'go-ts-mode-hook #'lsp!)
+;;   (add-hook! 'go-ts-mode-hook #'lsp-go-install-save-hooks))
+```
+
+```emacs-lisp
+;; (use-package emacs
+;;   :ensure nil
+;;   :config
+;;   (setq major-mode-remap-alist
+;;   '((go-mode . go-ts-mode))))
+```
+
+```emacs-lisp
+(after! (go flycheck lsp-ui)
+  (flycheck-golangci-lint-setup))
 ```
