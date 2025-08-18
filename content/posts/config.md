@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-08-18T07:44:02+02:00
+lastmod = 2025-08-18T07:45:25+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false

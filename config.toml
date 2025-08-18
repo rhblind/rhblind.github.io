@@ -6,7 +6,6 @@ theme = "hello-friend-ng"
 PygmentsCodeFences = true
 PygmentsStyle = "monokai"
 
-paginate  = 10
 rssLimit  = 10  # Maximum number of items in the RSS feed.
 # copyright = "This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License." # This message is only used by the RSS template.
 
@@ -32,6 +31,9 @@ disableRSS     = true
 disableSitemap = false
 disable404     = false
 disableHugoGeneratorInject = false
+
+[pagination]
+  pagerSize = 10
 
 [permalinks]
   posts = "/posts/:year/:month/:title/"
@@ -169,7 +171,7 @@ disableHugoGeneratorInject = false
   # Uncomment this if you want a portrait on your start page
   #
   [params.portrait]
-    path     = "/img/profile-picture.jpeg"
+    path     = "/img/profile-picture-circle.jpeg"
     alt      = "Portrait"
     maxWidth = "200px"
 
