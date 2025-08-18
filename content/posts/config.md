@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-08-18T07:45:25+02:00
+lastmod = 2025-08-18T08:29:00+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -56,7 +56,7 @@ operating system `ulimit`, but uses `pselect` which is limited to FD_SETSIZE fil
 This means that changing `ulimit` will not change the value of FD_SETSIZE compiled into Emacs and macOS
 libraries. To overcome this limitation we've to set the FD_SETSIZE CFLAG when compiling Emacs.
 
-```nil
+```shell
 CFLAGS="-DFD_SETSIZE=10000 -DDARWIN_UNLIMITED_SELECT"
 ```
 
