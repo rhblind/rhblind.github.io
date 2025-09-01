@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-08-18T08:29:00+02:00
+lastmod = 2025-09-02T00:49:37+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -154,6 +154,7 @@ General settings that makes life a bit easier.
       vc-follow-symlinks                  nil       ; Don't follow symlinks, edit them directly.
       which-key-idle-delay                0.2       ; Makes which-key feels more responsive.
       window-combination-resize           t         ; Take new window space from all other windows (not just the current).
+      window-divider-default-right-width  3         ; Thicker window dividers.
       x-stretch-cursor                    t         ; Stretch cursor to the glyph width.
       )
 ```
@@ -168,6 +169,7 @@ Here are some modes I always want active.
 (global-subword-mode            1)        ; Iterate through CamelCase words - Not sure how I like this
 (smartparens-global-mode        1)        ; Always enable smartparens
 (ws-butler-global-mode          1)        ; Unobtrusive way to trim spaces on end of lines
+(window-divider-mode            1)        ; Show window dividers
 
 ;; Enable visual-line-mode in certain modes (so I don't have to scroll horizontally).
 (dolist (hook '(text-mode-hook
@@ -471,6 +473,12 @@ List all processes running under Emacs.
 (map! :leader :desc "List processes" "P" #'list-processes)
 ```
 
+Use `SPC-!` to list all flycheck errors in the current buffer.
+
+```emacs-lisp
+(map! :leader :desc "List flycheck errors" "!" #'flycheck-list-errors)
+```
+
 **When on macOS, remember to disable the Mission Control shortcut keys as they override the inputs!**
 Always use `C-<left>` and `C-<right>` to move one word left or right.
 
@@ -496,7 +504,89 @@ When in `evil-mode`, use `C-n` and `C-p` to move to next or previous functions, 
 
 ### Doom configuration {#doom-configuration}
 
-In this section we generate the `init.el` file.
+In this section we generate the `init.el` and `early-init.el` files.
+
+
+#### Early Init {#early-init}
+
+Emacs 27+ introduces early-init.el, which is run before init.el, before package and UI initialization happens, and before site files are loaded. This is perfect for startup performance optimizations.
+
+```emacs-lisp
+;;; early-init.el -*- lexical-binding: t; -*-
+
+;; Emacs 27+ introduces early-init.el, which is run before init.el,
+;; before package and UI initialization happens, and before site files are loaded.
+
+;; Defer garbage collection further back in the startup process
+(setq gc-cons-threshold most-positive-fixnum
+      gc-cons-percentage 0.6)
+
+;; Temporarily disable file-name-handler-alist for startup performance
+(defvar doom--initial-file-name-handler-alist file-name-handler-alist)
+(setq file-name-handler-alist nil)
+
+;; Prevent the glimpse of un-styled Emacs by disabling these UI elements early
+(push '(menu-bar-lines . 0) default-frame-alist)
+(push '(tool-bar-lines . 0) default-frame-alist)
+(push '(vertical-scroll-bars) default-frame-alist)
+
+;; Resizing the Emacs frame can be a terribly expensive part of changing the
+;; font. By inhibiting this, we easily halve startup times with fonts that are
+;; larger than the system default
+(setq frame-inhibit-implied-resize t)
+
+;; Disable native-comp warnings popup
+(setq native-comp-async-report-warnings-errors nil)
+
+;; Prevent native-comp from JIT compiling during startup
+(setq native-comp-deferred-compilation nil
+      native-comp-jit-compilation nil)
+
+;; Re-enable JIT after startup
+(add-hook 'emacs-startup-hook
+          (lambda ()
+            (setq native-comp-deferred-compilation t
+                  native-comp-jit-compilation t)))
+
+;; Ignore X resources; its settings would be redundant with the other settings
+;; in this file and can conflict with later config (particularly where the
+;; cursor color is concerned)
+(advice-add #'x-apply-session-resources :override #'ignore)
+
+;; Prevent stray instances of package.el from polluting our startup
+(setq package-enable-at-startup nil)
+
+;; Faster to disable these here (before they've been initialized)
+(setq tool-bar-mode nil
+      menu-bar-mode nil
+      scroll-bar-mode nil)
+
+;; Reduce the frequency of which Emacs performs garbage collection during startup
+(setq gc-cons-percentage 0.6)
+
+;; Increase the amount of data Emacs reads from processes
+(setq read-process-output-max (* 3 1024 1024)) ;; 3mb
+
+;; Optimize for modern machines with more memory
+(setq large-file-warning-threshold 100000000) ;; 100MB
+
+;; Don't compact font caches during GC
+(setq inhibit-compacting-font-caches t)
+
+;; Suppress warnings during native compilation
+(when (boundp 'native-comp-eln-load-path)
+  (setq native-comp-async-report-warnings-errors 'silent))
+
+;; Disable site-start.el from loading
+(setq site-run-file nil)
+
+;; No need for titlebar on macOS
+(when (eq system-type 'darwin)
+  (push '(ns-transparent-titlebar . t) default-frame-alist))
+```
+
+
+#### Init File Header {#init-file-header}
 
 ```emacs-lisp
 ;;; init.el -*- lexical-binding: t; -*-
@@ -505,19 +595,12 @@ In this section we generate the `init.el` file.
 
 #### Sneaky garbage collection {#sneaky-garbage-collection}
 
-Defer garbage collection further back in the startup process.
-
-```emacs-lisp
-(setq gc-cons-threshold most-positive-fixnum)
-```
-
-Adopt a sneaky garbage collection strategy of waiting until idle time to collect;
-staving off the collector while I'm working.
+The initial GC threshold is set in early-init.el. Here we configure the garbage collection mode hook (gcmh) to adopt a sneaky garbage collection strategy of waiting until idle time to collect, staving off the collector while working.
 
 ```emacs-lisp
 (add-hook 'emacs-startup-hook #'(lambda ()
-                                  (setq gcmh-idle-delay  'auto                     ; or N seconds
-                                        gcmh-high-cons-threshold (* 16 1024 1024)  ; 16mb
+                                  (setq gcmh-idle-delay 'auto                      ;; or N seconds
+                                        gcmh-high-cons-threshold (* 16 1024 1024) ;; 16mb
                                         gcmh-verbose nil)))
 ```
 
@@ -529,6 +612,32 @@ Always load the newest version of a file.
 
 ```emacs-lisp
 (setq load-prefer-newer t)
+```
+
+
+#### Native Compilation {#native-compilation}
+
+Configure native compilation for better performance with Emacs 28+.
+
+```emacs-lisp
+;; Native compilation settings for performance
+(when (and (fboundp 'native-comp-available-p)
+           (native-comp-available-p))
+  ;; Compile packages asynchronously after installation
+  (setq package-native-compile t)
+
+  ;; Silence native-comp warnings
+  (setq native-comp-async-report-warnings-errors 'silent)
+
+  ;; Set native compilation speed (0-3, higher is faster but uses more resources)
+  (setq native-comp-speed 2)
+
+  ;; Enable native compilation for all installed packages
+  (setq package-native-compile t)
+
+  ;; Compile ahead of time for better startup performance
+  (setq native-comp-deferred-compilation t
+        native-comp-jit-compilation t))
 ```
 
 
@@ -1735,19 +1844,22 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  Claude Code
 
     ```emacs-lisp
-    (package! claude-code-ide
+    (package! claude-code-ide :pin "72f25c4"
       :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
     ```
 
     ```emacs-lisp
     (use-package! claude-code-ide
+      :defer t
+      :commands (claude-code-ide-menu claude-code-ide-emacs-tools-setup)
+      :init
+      (map! :leader
+            :desc "+Claude Code" "C" #'claude-code-ide-menu)
       :config
       (claude-code-ide-emacs-tools-setup)
       (setq claude-code-ide-terminal-backend 'vterm
             claude-code-ide-vterm-render-delay 0.001
-            claude-code-ide-enable-mcp-server t)
-      (map! :leader
-            :desc "+Claude Code" "C" #'claude-code-ide-menu))
+            claude-code-ide-enable-mcp-server t))
     ```
 
 <!--list-separator-->
@@ -1839,13 +1951,14 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  MCP Server
 
     ```emacs-lisp
-    (package! mcp-server :pin "adb93cf"
+    (package! mcp-server :pin "e5edc3e"
       :recipe (:host github :repo "rhblind/emacs-mcp-server"
                :files ("*.el" "mcp-wrapper.py" "mcp-wrapper.sh")))
     ```
 
     ```emacs-lisp
-    (add-hook 'emacs-startup-hook #'mcp-server-start-unix)
+    ;; Start MCP server after 2 seconds of idle time to avoid blocking startup
+    (run-with-idle-timer 2 nil #'mcp-server-start-unix)
     ```
 
     To hook up Claude Code to the MCP server, I use this command.
@@ -1861,7 +1974,8 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  GPTEL
 
     ```emacs-lisp
-    (require 'gptel-integrations)
+    (with-eval-after-load 'gptel
+      (require 'gptel-integrations))
 
     ;; Configure API key retrieval from auth-source
     ;; Add to ~/.authinfo or ~/.authinfo.gpg:
@@ -1874,16 +1988,39 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
     ```
 
 
-#### Auto themer {#auto-themer}
+#### Startup Profiling and Optimizations {#startup-profiling-and-optimizations}
 
-Nice way to create custom themes
+Benchmark startup time to identify bottlenecks.
+
+**Testing Startup Performance:**
+
+1.  Run `doom sync` to apply all configuration changes
+2.  Start Emacs and run `M-x benchmark-init/show-durations-tree` to see startup timings
+3.  Check overall startup time with `M-x emacs-init-time`
+4.  For more detailed analysis, start Emacs with `emacs --debug-init`
+5.  To profile specific functions: `M-x profiler-start`, restart Emacs, then `M-x profiler-report`
+
+<!--listend-->
 
 ```emacs-lisp
-(package! autothemer)
+(package! benchmark-init)
 ```
 
 ```emacs-lisp
-(use-package! autothemer)
+(use-package! benchmark-init
+  :demand t
+  :config
+  ;; To disable collection after init
+  (add-hook 'doom-first-input-hook #'benchmark-init/deactivate))
+
+;; Report startup time
+(add-hook 'emacs-startup-hook
+          (lambda ()
+            (message "Emacs loaded in %s with %d garbage collections."
+                     (format "%.2f seconds"
+                             (float-time
+                              (time-subtract after-init-time before-init-time)))
+                     gcs-done)))
 ```
 
 
@@ -1957,14 +2094,15 @@ The `dired-recent` package provides us with is a convenient way to visit previou
 Add some extra configuration options for the `dired` file manager.
 
 ```emacs-lisp
-(after! dired
-  (dired-async-mode 1)
-  (dired-recent-mode 1))
-
 (use-package! dired
+  :defer t
+  :commands (dired dired-jump)
+  :init
+  (map! :leader :desc "Dired" "-" #'dired-jump)         ;; easy access shortcut
   :config
   (require 'evil-collection)
-  (map! :leader :desc "Dired" "-" #'dired-jump)         ;; easy access shortcut
+  (dired-async-mode 1)
+  (dired-recent-mode 1)
   (map! :map dired-recent-mode-map "C-x C-d" nil)       ;; hijacks `counsult-dir' command
   (evil-collection-define-key 'normal 'dired-mode-map
     "h"         #'dired-up-directory
@@ -3014,6 +3152,7 @@ We usually don't need this package right away, so we'll delay the loading a bit.
       :i "C-<backspace>" #'vterm-send-meta-backspace
       :n "C-<backspace>" #'vterm-send-meta-backspace
       :i "C-g"        #'vterm-send-escape
+      :n "C-g"        #'vterm-send-escape
       ;; Meta+Enter sends a newline character to the vterm process
       :i "M-<return>" (lambda () (interactive) (process-send-string vterm--process "\n"))
       :n "M-<return>" (lambda () (interactive) (process-send-string vterm--process "\n"))
@@ -3367,7 +3506,8 @@ Everybody likes org-mode!
 Sometimes I'm a bit lazy and just want to click around with the mouse.
 
 ```emacs-lisp
-(require 'org-mouse)
+(with-eval-after-load 'org
+  (require 'org-mouse))
 ```
 
 <!--list-separator-->
@@ -3529,11 +3669,30 @@ TODO Organize this better
       (concat "${type:15} ${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
 ```
 
+Ensure org-roam database is properly initialized and maintained:
+
+```emacs-lisp
+(after! org-roam
+  ;; Enable autosync lazily when first accessing org-roam
+  (add-hook 'org-roam-mode-hook #'org-roam-db-autosync-enable)
+
+  ;; Ensure database is updated when org-roam files are saved
+  (add-hook 'after-save-hook
+            (lambda ()
+              (when (and (derived-mode-p 'org-mode)
+                         (org-roam-file-p))
+                (org-roam-db-update-file)))))
+```
+
 Add all `org-roam` files to list of extra files to be searched by text commands.
 
 ```emacs-lisp
 (after! (org org-roam)
-  (setq org-agenda-text-search-extra-files (org-roam--list-files org-roam-directory)))
+  ;; Set org-roam files lazily to avoid startup delays
+  (add-hook 'org-agenda-mode-hook
+            (lambda ()
+              (unless org-agenda-text-search-extra-files
+                (setq org-agenda-text-search-extra-files (org-roam--list-files org-roam-directory))))))
 ```
 
 
@@ -4418,28 +4577,38 @@ The "default" language server for Elixir. A bit slow and heavy on memory usage, 
 Available options
 
 ```emacs-lisp
-(lsp-register-custom-settings
- '(("elixirLS.dialyzerEnabled" lsp-elixir-dialyzer-enabled t)
-   ("elixirLS.dialyzerWarnOpts" lsp-elixir-dialyzer-warn-opts)
-   ("elixirLS.dialyzerFormat" lsp-elixir-dialyzer-format)
-   ("elixirLS.mixEnv" lsp-elixir-mix-env)
-   ("elixirLS.mixTarget" lsp-elixir-mix-target)
-   ("elixirLS.projectDir" lsp-elixir-project-dir)
-   ("elixirLS.fetchDeps" lsp-elixir-fetch-deps t)
-   ("elixirLS.suggestSpecs" lsp-elixir-suggest-specs t)
-   ("elixirLS.signatureAfterComplete" lsp-elixir-signature-after-complete t)
-   ("elixirLS.enableTestLenses" lsp-elixir-enable-test-lenses t)))
+;; (lsp-register-custom-settings
+;;  '(("elixirLS.dialyzerEnabled" lsp-elixir-dialyzer-enabled t)
+;;    ("elixirLS.dialyzerWarnOpts" lsp-elixir-dialyzer-warn-opts)
+;;    ("elixirLS.dialyzerFormat" lsp-elixir-dialyzer-format)
+;;    ("elixirLS.mixEnv" lsp-elixir-mix-env)
+;;    ("elixirLS.mixTarget" lsp-elixir-mix-target)
+;;    ("elixirLS.projectDir" lsp-elixir-project-dir)
+;;    ("elixirLS.fetchDeps" lsp-elixir-fetch-deps t)
+;;    ("elixirLS.suggestSpecs" lsp-elixir-suggest-specs t)
+;;    ("elixirLS.signatureAfterComplete" lsp-elixir-signature-after-complete t)
+;;    ("elixirLS.enableTestLenses" lsp-elixir-enable-test-lenses t)))
 ```
 
 ```emacs-lisp
-(after! lsp-mode
-  (defvar lsp-elixir--config-options (make-hash-table))
+;; (after! lsp-mode
+;;   (defvar lsp-elixir--config-options (make-hash-table))
 
-  ;; Disable Dialyzer in elixir-ls
-  (puthash "dialyzerEnabled" :json-false lsp-elixir--config-options)
+;;   ;; Disable Dialyzer in elixir-ls
+;;   (puthash "dialyzerEnabled" :json-false lsp-elixir--config-options)
 
-  (add-hook! 'lsp-after-initialize-hook
-             (lambda () (lsp--set-configuration `(:elixirLS, lsp-elixir--config-options)))))
+;;   (add-hook! 'lsp-after-initialize-hook
+;;              (lambda () (lsp--set-configuration `(:elixirLS, lsp-elixir--config-options)))))
+```
+
+
+#### ExpertLSP {#expertlsp}
+
+The official language server for Elixir.
+
+```emacs-lisp
+;; (after! lsp-mode
+;;   (add-hook! 'lsp-elixir-server-command '("~/.local/bin/expert_darwin_arm64")))
 ```
 
 
