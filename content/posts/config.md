@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-09-02T00:49:37+02:00
+lastmod = 2025-09-04T00:21:22+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -476,7 +476,14 @@ List all processes running under Emacs.
 Use `SPC-!` to list all flycheck errors in the current buffer.
 
 ```emacs-lisp
-(map! :leader :desc "List flycheck errors" "!" #'flycheck-list-errors)
+(defun cust/flycheck-list-errors-and-focus ()
+  "List flycheck errors and focus the error list window."
+  (interactive)
+  (flycheck-list-errors)
+  (when-let ((window (get-buffer-window flycheck-error-list-buffer)))
+    (select-window window)))
+
+(map! :leader :desc "List flycheck errors" "!" #'cust/flycheck-list-errors-and-focus)
 ```
 
 **When on macOS, remember to disable the Mission Control shortcut keys as they override the inputs!**
@@ -701,11 +708,11 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
 -  Unpinned core packages
 
-    In some cases we want to install the latest and greatest version of a package. Doom allows us to unpin packages
-    using the `unpin` macro.
+    In some cases we want to install the latest and greatest version of a package.
+    Doom allows us to unpin packages using the `unpin` macro.
 
     ```emacs-lisp
-    (unpin! (:tools lsp tree-sitter))
+    (unpin! (:tools lsp))
     ```
 
 <!--list-separator-->
@@ -724,8 +731,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
 
     <a id="code-snippet--doom-completion"></a>
     ```emacs-lisp
-    ;;(company          ; the ultimate code completion backend
-    ;; +childframe)     ; ...when your children are better than you
+    ;;company           ; the ultimate code completion backend
     (corfu              ; complete with cap(f), cape and a flying feather!
      +icons
      +dabbrev
@@ -745,7 +751,6 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;doom-quit         ; DOOM quit-message prompts when you quit Emacs
     (emoji +unicode)    ; 🙂
     hl-todo             ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
-    ;;hydra
     indent-guides       ; highlighted indent columns
     (ligatures +extra)  ; ligatures and symbols to make your code pretty again
     ;;minimap           ; show a map of the code on the side
@@ -759,7 +764,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;tabs              ; a tab bar for Emacs
     treemacs            ; a project drawer, like neotree but cooler
     ;;unicode           ; extended unicode support for various languages
-    vc-gutter           ; vcs diff in the fringe
+    (vc-gutter +pretty) ; vcs diff in the fringe
     vi-tilde-fringe     ; fringe tildes to mark beyond EOB
     (window-select
      +numbers)          ; visually switch windows
@@ -788,8 +793,9 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     (dired              ; making dired pretty [functional]
      +icons)
     electric            ; smarter, keyword-based electric-indent
+    eww                 ; the internet is gross
     (ibuffer +icons)    ; interactive buffer management
-    (undo)              ; persistent, smarter undo for your inevitable mistakes
+    undo                ; persistent, smarter undo for your inevitable mistakes
     vc                  ; version-control and Emacs, sitting in a tree
     ```
 
@@ -804,9 +810,8 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     <a id="code-snippet--doom-checkers"></a>
     ```emacs-lisp
     syntax              ; tasing you for every semicolon you forget
-    ;; (:if                ; tasing you for misspelling mispelling
-    ;;  (executable-find "aspell") spell +aspell +flyspell)
-    (spell +aspell +flyspell)
+    (spell
+     +aspell +flyspell) ; tasing you for misspelling mispelling
     grammar             ; tasing grammar mistake every you make
     ```
 
@@ -832,19 +837,15 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     make                ; run make tasks from Emacs
     ;;pass              ; password manager for nerds
     pdf                 ; pdf enhancements
-    ;;prodigy           ; FIXME managing external services & code builders
-    ;;rgb               ; creating color strings
-    ;;taskrunner        ; taskrunner for all your projects
-    ;;terraform         ; infrastructure as code
-    ;;tmux              ; an API for interacting with tmux
-    tree-sitter         ; syntax and parsing, sitting in a tree...
+    terraform           ; infrastructure as code
+    tmux                ; an API for interacting with tmux
     ;;upload            ; map local to remote projects via ssh/ftp
     ```
 
     <a id="code-snippet--doom-os"></a>
     ```emacs-lisp
-    (:if IS-MAC macos)  ; improve compatibility with macOS
-    tty                 ; improve the terminal Emacs experience
+    (:if (featurep :system 'macos) macos) ; improve compatibility with macOS
+    tty                                   ; improve the terminal Emacs experience
     ```
 
 <!--list-separator-->
@@ -865,13 +866,11 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;crystal           ; ruby at the speed of c
     (csharp
      +dotnet
-     +tree-sitter
      +lsp)              ; unity, .NET, and mono shenanigans
     data                ; config/data formats
     ;;(dart +flutter)   ; paint ui and not much else
     ;;dhall
     (elixir
-     +tree-sitter
      +lsp)              ; erlang done right
     ;;elm               ; care for a cup of TEA?
     emacs-lisp          ; drown in parentheses
@@ -884,7 +883,6 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;fstar             ; (dependent) types and (monadic) effects and Z3
     ;;gdscript          ; the language you waited for
     (go
-     +tree-sitter
      +lsp)              ; the hipster dialect
     ;;(haskell +lsp)    ; a language that's lazier than I am
     ;;hy                ; readability of scheme w/ speed of python
@@ -892,7 +890,6 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     json                ; At least it ain't XML
     ;;(java +lsp)       ; the poster child for carpal tunnel syndrome
     (javascript
-     +tree-sitter
      +lsp)              ; all(hope(abandon(ye(who(enter(here))))))
     ;;julia             ; a better, faster MATLAB
     ;;kotlin            ; a better, slicker Java(Script)
@@ -900,16 +897,17 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;lean              ; for folks with too much to prove
     ;;ledger            ; be audit you can be
     lua                 ; one-based indices? one-based indices
-    markdown            ; writing docs for people to ignore
+    (markdown
+     +grip)             ; writing docs for people to ignore
     ;;nim               ; python + lisp at the speed of c
     ;;nix               ; I hereby declare "nix geht mehr!"
     ;;ocaml             ; an objective camel
-    (org                ;organize your plain life in plain text
+    (org                ; organize your plain life in plain text
      +pretty            ; yessss my pretties! (nice unicode symbols)
      +dragndrop         ; drag & drop files/images into org buffers
      +hugo              ; use Emacs for hugo blogging
      +noter             ; enhanced PDF notetaking
-     ;; +jupyter           ; ipython/jupyter support for babel
+     ;; +jupyter        ; ipython/jupyter support for babel
      +pandoc            ; export-with-pandoc support
      +gnuplot           ; who doesn't like pretty pictures
      ;;+pomodoro        ; be fruitful with the tomato technique
@@ -920,7 +918,6 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;purescript        ; javascript, but functional
     (python             ; beautiful is better than ugly
      +lsp
-     +tree-sitter
      +cython
      +poetry
      +pyright)
@@ -936,14 +933,12 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;(scheme +guile)   ; a fully conniving family of lisps
     (sh
      +powershell
-     +tree-sitter
      +lsp)              ; she sells {ba,z,fi}sh shells on the C xor
     ;;sml
     ;;solidity          ; do you need a blockchain? No.
     ;;swift             ; who asked for emoji variables?
     ;;terra             ; Earth and Moon in alignment for performance.
     (web
-     +tree-sitter
      +lsp)              ; the tubes
     (yaml               ; JSON, but readable
      +lsp)
@@ -1890,8 +1885,7 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
       ;; https://github.com/copilot-emacs/copilot.el/issues/382#issuecomment-2823816333
       (setq lsp-copilot-enabled t
             copilot-lsp-settings '(:github (:copilot (:selectedCompletionModel "claude-3.7-sonnet"))))
-      (add-to-list 'copilot-indentation-alist '(elixir-mode elixir-smie-indent-basic))
-      (add-to-list 'copilot-indentation-alist '(elixir-ts-mode elixir-ts-indent-offset)))
+      (add-to-list 'copilot-indentation-alist '(elixir-mode elixir-ts-indent-offset)))
     ```
 
     Required to run `M-x copilot-login` for using the plugin.
@@ -3037,7 +3031,7 @@ Make `treemacs` pretty and functional.
         doom-themes-treemacs-enable-variable-pitch t)   ; Enable variable-pitch font
 
   (setq winum-ignored-buffers-regexp
-        (delete (regexp-quote (format "%sFramebuffer-" treemacs--buffer-name-prefix))
+        (delete (regexp-quote (format "%sFramebuffer-" treemacs-buffer-name-prefix))
                 winum-ignored-buffers-regexp))
 
   ;; This PR cause treemacs to appear on the bottom instead of on the left/right hand side
@@ -4470,94 +4464,17 @@ Use the latest and greatest!
 ```
 
 
-#### Elixir tree-sitter support {#elixir-tree-sitter-support}
-
-Tree-sitter is a wide-spread system for parsing text, and is the "new" way to support syntax highlighting in many text editors, including Emacs.
-
-To use tree-sitter, either Emacs 29.1 compiled with tree-sitter support or Emacs 30 (which has it built-in) is required. To enable tree-sitter for Elixir with Doom Emacs, some extra steps are required (as per october 2024).
-
-**Step 1** - Install tree-sitter support for `.heex` and `.ex` files.
+#### Flycheck integration {#flycheck-integration}
 
 ```emacs-lisp
-(package! heex-ts-mode)
-(package! elixir-ts-mode)
-```
-
-**Step 2** - Install grammar files
-Execute `M-x treesit-install-language-grammar` and enter `elixir`.  When prompted if you want to do it interactively, enter "Yes",
-and paste the Github repository (see below) for the grammar files. Just keep pressing `<enter>` to accept defaults for the rest of the process.
-Repeat the step for `heex`.
-
-**Github repositories:**
-
--   Elixir: <https://github.com/elixir-lang/tree-sitter-elixir>
--   Heex: <https://github.com/phoenixframework/tree-sitter-heex>
-
-**Step 3** - Configure the modes
-
-```emacs-lisp
-;; Replace the elixir-mode with elixir-ts-mode
-(add-to-list 'major-mode-remap-alist '(elixir-mode . elixir-ts-mode))
-
-(add-hook! 'elixir-ts-mode-hook #'lsp)
-
-(use-package! elixir-ts-mode
-  :defer t
-  :init (provide 'smartparens-elixir)
-  :config
-  (set-ligatures! 'elixir-ts-mode
-    :def "def"
-    :lambda "fn"
-    :not "!"
-    :in "in"
-    :not_in "not in"
-    :and "and"
-    :or "or"
-    :for "for"
-    :return "return"
-    :yield "use")
-  (sp-with-modes 'elixir-ts-mode
-      (sp-local-pair "do" "end"
-                  :when '(("RET" "<evil-ret>"))
-                  :unless '(sp-in-comment-p sp-in-string-p)
-                  :post-handlers '("||\n[i]"))
-      (sp-local-pair "do " " end" :unless '(sp-in-comment-p sp-in-string-p))
-      (sp-local-pair "fn " " end" :unless '(sp-in-comment-p sp-in-string-p)))
-
-  (after! highlight-numbers
-    (puthash 'elixir-ts-mode
-             "\\_<-?[[:digit:]]+\\(?:_[[:digit:]]\\{3\\}\\)*\\_>"
-             highlight-numbers-modelist)))
-
 ;; Override the `lsp-credo-version' variable to get the latest version.
 ;; It has to be set before `lsp-credo.el' is loaded.
 (custom-set-variables '(lsp-credo-version "0.3.0"))
-(use-package! flycheck-credo
-  :when (and (modulep! :checkers syntax)
-             (not (modulep! :checkers syntax +flymake)))
-  :after elixir-ts-mode
-  :config (flycheck-credo-setup))
-
 (use-package! flycheck-dialyxir
   :when (and (modulep! :checkers syntax)
              (not (modulep! :checkers syntax +flymake)))
-  :after elixir-ts-mode
+  :after elixir-mode
   :config (flycheck-dialyxir-setup))
-
-(use-package! exunit
-  :hook (elixir-ts-mode . exunit-mode)
-  :init
-  (map! :after elixir-ts-mode
-        :localleader
-        :map elixir-ts-mode-map
-        :prefix ("t" . "test")
-        "a" #'exunit-verify-all
-        "r" #'exunit-rerun
-        "v" #'exunit-verify
-        "T" #'exunit-toggle-file-and-test
-        "t" #'exunit-toggle-file-and-test-other-window
-        "s" #'exunit-verify-single
-        "X" #'exunit-iex-mode))
 ```
 
 
@@ -4567,7 +4484,7 @@ The "default" language server for Elixir. A bit slow and heavy on memory usage, 
 [See this thread](https://elixirforum.com/t/emacs-elixir-setup-configuration-wiki/19196/194)
 
 ```emacs-lisp
-(after! lsp-mode
+(after! (lsp-mode elixir-mode)
   (add-hook! 'lsp-after-initialize-hook
              (lambda ()
                ;; Disable the ElixirLS Dialyzer
@@ -4607,7 +4524,7 @@ Available options
 The official language server for Elixir.
 
 ```emacs-lisp
-;; (after! lsp-mode
+;; (after! (lsp-mode elixir-mode)
 ;;   (add-hook! 'lsp-elixir-server-command '("~/.local/bin/expert_darwin_arm64")))
 ```
 
@@ -4626,11 +4543,8 @@ The official language server for Elixir.
   ;; (add-to-list 'mcp-hub-servers '("hexdocs" . (:command "npx" :args ("-y" "hexdocs-mcp@0.6.0"))))
   (mcp-hub-start-all-server))
 
-(add-hook! 'elixir-ts-mode-hook #'cust/mcp-hub-start-elixir-servers)
+(add-hook! 'elixir-mode-hook #'cust/mcp-hub-start-elixir-servers)
 ```
-
-
-#### HexDocsMCP {#hexdocsmcp}
 
 
 ### C-Sharp {#c-sharp}
