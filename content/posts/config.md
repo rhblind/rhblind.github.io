@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-09-04T00:21:22+02:00
+lastmod = 2025-12-08T23:13:47+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -135,6 +135,10 @@ General settings that makes life a bit easier.
 
 ```emacs-lisp
 (setq auto-save-default                   t         ; I don't want to lose work.
+      auto-revert-use-notify              t         ; Use file notifications for instant updates
+      auto-revert-interval                1         ; Fallback poll interval (seconds)
+      auto-revert-avoid-polling           t         ; Prefer notifications over polling
+      revert-without-query                '(".*")   ; Never prompt, revert all files silently
       delete-by-moving-to-trash           t         ; Delete files to trash.
       confirm-kill-emacs                  nil       ; Don't ask if I really want to quit!
       diff-hl-flydiff-delay               2         ; Controls how often `diff-hl' updates in seconds.
@@ -162,14 +166,17 @@ General settings that makes life a bit easier.
 Here are some modes I always want active.
 
 ```emacs-lisp
-(diff-hl-flydiff-mode           1)        ; This makes `diff-hl' updated asynchronous
-(display-time-mode              1)        ; I want to know what time it is
-(drag-stuff-global-mode         1)        ; Drag text around
-(global-goto-address-mode       1)        ; A minor mode to render urls and like as links
-(global-subword-mode            1)        ; Iterate through CamelCase words - Not sure how I like this
-(smartparens-global-mode        1)        ; Always enable smartparens
-(ws-butler-global-mode          1)        ; Unobtrusive way to trim spaces on end of lines
-(window-divider-mode            1)        ; Show window dividers
+(diff-hl-flydiff-mode                1)       ; This makes `diff-hl' updated asynchronous
+(display-time-mode                   1)       ; I want to know what time it is
+(global-auto-revert-mode             1)       ; Auto-revert buffers when files change on disk
+(drag-stuff-global-mode              1)       ; Drag text around
+(global-treesit-fold-mode            1)       ; Enable tree-sitter based code folding
+(global-treesit-fold-indicators-mode 1)       ; Show fold indicators in the fringe
+(global-goto-address-mode            1)       ; A minor mode to render urls and like as links
+(global-subword-mode                 1)       ; Iterate through CamelCase words - Not sure how I like this
+(smartparens-global-mode             1)       ; Always enable smartparens
+(ws-butler-global-mode               1)       ; Unobtrusive way to trim spaces on end of lines
+(window-divider-mode                 1)       ; Show window dividers
 
 ;; Enable visual-line-mode in certain modes (so I don't have to scroll horizontally).
 (dolist (hook '(text-mode-hook
@@ -486,6 +493,13 @@ Use `SPC-!` to list all flycheck errors in the current buffer.
 (map! :leader :desc "List flycheck errors" "!" #'cust/flycheck-list-errors-and-focus)
 ```
 
+Disable proselint checker (CLI changed in 0.16.0, now requires subcommands).
+
+```emacs-lisp
+(after! flycheck
+  (setq-default flycheck-disabled-checkers '(proselint)))
+```
+
 **When on macOS, remember to disable the Mission Control shortcut keys as they override the inputs!**
 Always use `C-<left>` and `C-<right>` to move one word left or right.
 
@@ -606,8 +620,8 @@ The initial GC threshold is set in early-init.el. Here we configure the garbage 
 
 ```emacs-lisp
 (add-hook 'emacs-startup-hook #'(lambda ()
-                                  (setq gcmh-idle-delay 'auto                      ;; or N seconds
-                                        gcmh-high-cons-threshold (* 16 1024 1024) ;; 16mb
+                                  (setq gcmh-idle-delay 5                           ;; Wait 5 seconds idle before GC
+                                        gcmh-high-cons-threshold (* 100 1024 1024)  ;; 100mb
                                         gcmh-verbose nil)))
 ```
 
@@ -645,6 +659,72 @@ Configure native compilation for better performance with Emacs 28+.
   ;; Compile ahead of time for better startup performance
   (setq native-comp-deferred-compilation t
         native-comp-jit-compilation t))
+```
+
+
+#### File Loading Optimizations {#file-loading-optimizations}
+
+Optimize file loading performance by deferring fontification, reducing syntax highlighting overhead, and lazy-loading modeline updates.
+
+```emacs-lisp
+;; Defer jit-lock fontification for smoother file opening
+(setq jit-lock-defer-time 0.05)
+
+;; Reduce font-lock decoration level (2 = medium, t = maximum)
+(setq font-lock-maximum-decoration '((t . 2)))
+
+;; Disable global emojify-mode (significant CPU overhead during fontification)
+(after! emojify
+  (global-emojify-mode -1))
+
+;; Defer modeline updates to idle time instead of immediate on file open
+(defvar cust/pending-modeline-update nil)
+
+(defun cust/deferred-modeline-update ()
+  "Run modeline updates after idle time."
+  (when cust/pending-modeline-update
+    (setq cust/pending-modeline-update nil)
+    (when (fboundp 'doom-modeline-update-buffer-file-name)
+      (doom-modeline-update-buffer-file-name))
+    (when (fboundp 'doom-modeline-update-buffer-file-icon)
+      (doom-modeline-update-buffer-file-icon))
+    (when (fboundp 'doom-modeline-update-vcs)
+      (doom-modeline-update-vcs))))
+
+(defun cust/schedule-modeline-update ()
+  "Schedule modeline update for idle time."
+  (setq cust/pending-modeline-update t)
+  (run-with-idle-timer 0.5 nil #'cust/deferred-modeline-update))
+
+;; Replace immediate modeline hooks with deferred version
+(after! doom-modeline
+  (remove-hook 'find-file-hook #'doom-modeline-update-buffer-file-name)
+  (remove-hook 'find-file-hook #'doom-modeline-update-buffer-file-icon)
+  (remove-hook 'find-file-hook #'doom-modeline-update-vcs)
+  (add-hook 'find-file-hook #'cust/schedule-modeline-update))
+```
+
+Defer `undo-fu-session` recovery to idle time. The package saves and restores undo history across sessions,
+but it loads synchronously on `find-file-hook`, reading from disk and computing a SHA1 checksum of the buffer.
+This is expensive for large files and adds noticeable delay.
+
+```emacs-lisp
+(after! undo-fu-session
+  ;; Remove the synchronous hook
+  (remove-hook 'find-file-hook #'undo-fu-session--recover-safe)
+
+  (defun +undo-fu-session--recover-in-buffer (buf)
+    "Recover undo-fu-session in BUF if it's still live."
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (undo-fu-session--recover-safe))))
+
+  ;; Add a deferred version that runs when Emacs is idle
+  (defun +undo-fu-session--recover-deferred ()
+    "Defer undo-fu-session recovery to idle time for faster file loading."
+    (run-with-idle-timer 0.5 nil #'+undo-fu-session--recover-in-buffer (current-buffer)))
+
+  (add-hook 'find-file-hook #'+undo-fu-session--recover-deferred))
 ```
 
 
@@ -712,7 +792,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     Doom allows us to unpin packages using the `unpin` macro.
 
     ```emacs-lisp
-    (unpin! (:tools lsp))
+    (unpin! (:tools lsp magit forge transient))
     ```
 
 <!--list-separator-->
@@ -837,8 +917,9 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     make                ; run make tasks from Emacs
     ;;pass              ; password manager for nerds
     pdf                 ; pdf enhancements
-    terraform           ; infrastructure as code
+    ;;terraform         ; infrastructure as code
     tmux                ; an API for interacting with tmux
+    tree-sitter         ; syntax and parsing, sitting in a tree...
     ;;upload            ; map local to remote projects via ssh/ftp
     ```
 
@@ -871,7 +952,8 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ;;(dart +flutter)   ; paint ui and not much else
     ;;dhall
     (elixir
-     +lsp)              ; erlang done right
+     +lsp
+     +tree-sitter)      ; erlang done right
     ;;elm               ; care for a cup of TEA?
     emacs-lisp          ; drown in parentheses
     (erlang +lsp)       ; an elegant language for a more civilized age
@@ -912,7 +994,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
      +gnuplot           ; who doesn't like pretty pictures
      ;;+pomodoro        ; be fruitful with the tomato technique
      +present           ; using org-mode for presentations
-     +roam2)            ; wander around notes
+     +roam)             ; wander around notes
     ;;php               ; perl's insecure younger brother
     ;;plantuml          ; diagrams for confusing people more
     ;;purescript        ; javascript, but functional
@@ -941,7 +1023,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     (web
      +lsp)              ; the tubes
     (yaml               ; JSON, but readable
-     +lsp)
+     +lsp-)
     ;;zig               ; C, but simpler
     ```
 
@@ -1839,7 +1921,7 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  Claude Code
 
     ```emacs-lisp
-    (package! claude-code-ide :pin "72f25c4"
+    (package! claude-code-ide :pin "32d853e"
       :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
     ```
 
@@ -1859,9 +1941,114 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
 <!--list-separator-->
 
+-  Azure Claude Configuration
+
+    Shared configuration for Claude via Azure Foundry, used by both gptel and Minuet.
+
+    ```emacs-lisp
+    ;; Add to ~/.authinfo.gpg:
+    ;;   machine dadp-openai-us2-resource.openai.azure.com login apikey password YOUR_API_KEY
+    (defvar azure-claude-host "dadp-openai-us2-resource.openai.azure.com")
+
+    (defun cust/azure-claude-api-key ()
+      "Retrieve Azure Claude API key from auth-source."
+      (auth-source-pick-first-password :host azure-claude-host :user "apikey"))
+    ```
+
+<!--list-separator-->
+
+-  Minuet - AI Code Completion
+
+    Minuet provides inline code completions using any LLM backend (similar to GitHub Copilot).
+    It syncs its provider configuration from gptel to avoid duplicate API key management.
+
+    Based on [Mike Olson's Emacs AI Setup](https://mwolson.org/guides/emacs-ai-setup/).
+
+    ```emacs-lisp
+    ;; Disabled - too slow with Azure Foundry, using Copilot instead
+    ;; (package! minuet
+    ;;   :recipe (:host github :repo "milanglacier/minuet-ai.el"))
+    ```
+
+    ```emacs-lisp
+    ;; Disabled - too slow with Azure Foundry, using Copilot instead
+    ;; (use-package! minuet
+    ;;   :hook ((prog-mode . minuet-auto-suggestion-mode)
+    ;;          (org-mode . minuet-auto-suggestion-mode))
+    ;;   :config
+    ;;   ;; Fix bug in minuet where comment-start can be nil
+    ;;   (defun cust/minuet--add-tab-comment-fixed ()
+    ;;     "Add comment string for tab use into the prompt.
+    ;; Fixed version that handles nil comment-start."
+    ;;     (if-let* ((language-p (derived-mode-p 'prog-mode 'text-mode 'conf-mode))
+    ;;               (comment-str (or comment-start "#"))
+    ;;               (commentstring (format "%s %%s%s"
+    ;;                                      (replace-regexp-in-string "^%" "%%" comment-str)
+    ;;                                      (or comment-end ""))))
+    ;;         (if indent-tabs-mode
+    ;;             (format commentstring "indentation: use \t for a tab")
+    ;;           (format commentstring (format "indentation: use %d spaces for a tab" tab-width)))
+    ;;       ""))
+    ;;   (advice-add 'minuet--add-tab-comment :override #'cust/minuet--add-tab-comment-fixed)
+    ;;
+    ;;   (defun cust/minuet--add-language-comment-fixed ()
+    ;;     "Add comment string for language use into the prompt.
+    ;; Fixed version that handles nil comment-start."
+    ;;     (if-let* ((language-p (derived-mode-p 'prog-mode 'text-mode 'conf-mode))
+    ;;               (mode (symbol-name major-mode))
+    ;;               (mode (replace-regexp-in-string "-ts-mode" "" mode))
+    ;;               (mode (replace-regexp-in-string "-mode" "" mode))
+    ;;               (comment-str (or comment-start "#"))
+    ;;               (commentstring (format "%s %%s%s"
+    ;;                                      (replace-regexp-in-string "^%" "%%" comment-str)
+    ;;                                      (or comment-end ""))))
+    ;;         (format commentstring (concat "language: " mode))
+    ;;       ""))
+    ;;   (advice-add 'minuet--add-language-comment :override #'cust/minuet--add-language-comment-fixed)
+    ;;
+    ;;   ;; Use Claude provider with Azure Foundry endpoint
+    ;;   (setq minuet-provider 'claude)
+    ;;
+    ;;   ;; Override only the necessary keys in minuet-claude-options
+    ;;   (setq minuet-claude-options
+    ;;         (plist-put minuet-claude-options :end-point
+    ;;                    (format "https://%s/anthropic/v1/messages" azure-claude-host)))
+    ;;   (setq minuet-claude-options
+    ;;         (plist-put minuet-claude-options :api-key #'cust/azure-claude-api-key))
+    ;;   (setq minuet-claude-options
+    ;;         (plist-put minuet-claude-options :model "claude-haiku-4-5"))
+    ;;   (setq minuet-claude-options
+    ;;         (plist-put minuet-claude-options :max_tokens 128))
+    ;;
+    ;;   ;; Minuet settings - optimized for speed
+    ;;   (setq minuet-n-completions 1
+    ;;         minuet-auto-suggestion-debounce-delay 0.3  ; Blog recommends 0.3s
+    ;;         minuet-auto-suggestion-throttle-delay 0.5
+    ;;         minuet-add-single-line-entry nil
+    ;;         minuet-context-window 4000       ; Smaller context = faster responses
+    ;;         minuet-request-timeout 3)
+    ;;
+    ;;   ;; Make suggestions visible (gray italic ghost text)
+    ;;   (set-face-attribute 'minuet-suggestion-face nil
+    ;;                       :foreground "gray50"
+    ;;                       :slant 'italic)
+    ;;
+    ;;   ;; Keybindings
+    ;;   (map! :map minuet-active-mode-map
+    ;;         "M-p" #'minuet-previous-suggestion
+    ;;         "M-n" #'minuet-next-suggestion
+    ;;         "<tab>" #'minuet-accept-suggestion
+    ;;         "TAB" #'minuet-accept-suggestion
+    ;;         "M-a" #'minuet-accept-suggestion-line
+    ;;         "M-e" #'minuet-dismiss-suggestion))
+    ```
+
+<!--list-separator-->
+
 -  Github Copilot
 
     Unofficial GitHub Copilot plugin for Emacs.
+    Required to run `M-x copilot-login` for using the plugin.
 
     **Copilot code plugin**
 
@@ -1871,7 +2058,6 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
     ```
 
     ```emacs-lisp
-    ;; accept completion from copilot and fallback to company
     (use-package! copilot
       :hook ((prog-mode . copilot-mode)
              (org-mode . copilot-mode))
@@ -1881,35 +2067,9 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
                   ("C-TAB" . 'copilot-accept-completion-by-word)
                   ("C-<tab>" . 'copilot-accept-completion-by-word))
       :config
-      ;; Does this work?
-      ;; https://github.com/copilot-emacs/copilot.el/issues/382#issuecomment-2823816333
-      (setq lsp-copilot-enabled t
-            copilot-lsp-settings '(:github (:copilot (:selectedCompletionModel "claude-3.7-sonnet"))))
-      (add-to-list 'copilot-indentation-alist '(elixir-mode elixir-ts-indent-offset)))
-    ```
-
-    Required to run `M-x copilot-login` for using the plugin.
-
-<!--list-separator-->
-
--  Aider
-
-    Aider is a well-known and highly effective AI programming tool for the terminal.
-    It can give us AI-features similar to those found in the [Cursor AI Code editor](https://www.cursor.com/), but in Emacs.
-
-    ```emacs-lisp
-    (unpin! transient)  ;; Aider requires a newer version of transient than Doom provides
-    (package! transient :recipe (:host github :repo "magit/transient"))
-    (package! aider :recipe (:host github :repo "tninja/aider.el" ))
-    ```
-
-    ```emacs-lisp
-    (use-package aider
-      :config
-      (require 'aider-doom)
-      (setq aider-args `("--config" ,(expand-file-name "~/.aider.conf.yml")))
-      (aider-magit-setup-transients)
-      )
+      (add-to-list 'copilot-major-mode-alist '("elixir-ts-mode" . "elixir"))
+      (add-to-list 'copilot-indentation-alist '(elixir-ts-mode elixir-ts-indent-offset))
+    )
     ```
 
 <!--list-separator-->
@@ -1944,8 +2104,10 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
 -  MCP Server
 
+    Pure Elisp implementation of an MCP server.
+
     ```emacs-lisp
-    (package! mcp-server :pin "e5edc3e"
+    (package! mcp-server :pin "f1c6dec"
       :recipe (:host github :repo "rhblind/emacs-mcp-server"
                :files ("*.el" "mcp-wrapper.py" "mcp-wrapper.sh")))
     ```
@@ -1953,6 +2115,18 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
     ```emacs-lisp
     ;; Start MCP server after 2 seconds of idle time to avoid blocking startup
     (run-with-idle-timer 2 nil #'mcp-server-start-unix)
+    ```
+
+    When developing this package, load the local version of the MCP server.
+    Comment this section out when not developing.
+
+    ```emacs-lisp
+    ;; (package! mcp-server :disable t)
+    ```
+
+    ```emacs-lisp
+    ;; (add-to-list 'load-path "~/workspace/emacs-mcp-server")
+    ;; (require 'mcp-server)
     ```
 
     To hook up Claude Code to the MCP server, I use this command.
@@ -1968,17 +2142,22 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  GPTEL
 
     ```emacs-lisp
-    (with-eval-after-load 'gptel
-      (require 'gptel-integrations))
+    ;; NOTE: gptel-integrations requires minuet to be installed; it's autoloaded by gptel
+    ;; so we don't need to explicitly require it here.
 
-    ;; Configure API key retrieval from auth-source
-    ;; Add to ~/.authinfo or ~/.authinfo.gpg:
-    ;; machine api.anthropic.com login apikey password YOUR_API_KEY
-
-    ;; Set up Anthropic Claude backend
-    (setq ;; gptel-backend (gptel-make-anthropic "Claude" :stream t :key gptel-api-key)
-          gptel-backend (gptel-make-gh-copilot "Copilot")
-          gptel-model "claude-4-0-sonnet-20250805")
+    ;; Set up Claude via Azure Foundry (uses azure-claude-host and cust/azure-claude-api-key defined above)
+    ;; Note: Use gptel-make-anthropic since Azure Foundry uses the Anthropic Messages API format
+    ;; Azure Foundry requires x-api-key header (like standard Anthropic API) and anthropic-version header
+    (setq gptel-backend (gptel-make-anthropic "Azure-Claude"
+                          :host (concat azure-claude-host "/anthropic")
+                          :endpoint "/v1/messages"
+                          :stream t
+                          :key #'cust/azure-claude-api-key
+                          :header (lambda ()
+                                    (list (cons "x-api-key" (cust/azure-claude-api-key))
+                                          (cons "anthropic-version" "2023-06-01")))
+                          :models '(claude-sonnet-4-5 claude-opus-4-5 claude-haiku-4-5))
+          gptel-model 'claude-sonnet-4-5)
     ```
 
 
@@ -2232,22 +2411,6 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
 ```
 
 
-#### Eat {#eat}
-
-[Eat](https://codeberg.org/akib/emacs-eat) is a terminal emulator for Emacs, which is a bit more advanced than the built-in.
-
-```emacs-lisp
-(package! eat
-  :recipe (:type git
-           :host codeberg
-           :repo "akib/emacs-eat"
-           :files ("*.el" ("term" "term/*.el") "*.texi" "*.ti" ("terminfo/e" "terminfo/e/*")
-                   ("terminfo/65" "terminfo/65/*")
-                   ("integration" "integration/*")
-                   (:exclude ".dir-locals.el" "*-tests.el"))))
-```
-
-
 #### Evil {#evil}
 
 > From the `:editor evil` module.
@@ -2448,17 +2611,58 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
 
 > From the `:editor fold` module
 
-Doom Emacs comes with a combination of `hideshow`, `vimish-fold` and `outline-minor-mode` to
-enable folding for various modes. It doesn't seem to work properly with `LSP` mode, so we'll
-configure `lsp-origami` to use for code folding with `lsp-mode`.
+For tree-sitter based modes, we can use the `treesit-fold` package instead.
 
 ```emacs-lisp
-(package! lsp-origami)
+(package! treesit-fold)
 ```
 
+Make folding work from anywhere within a foldable construct, not just on the exact folding marker:
+
 ```emacs-lisp
-(use-package! lsp-origami
-  :hook (lsp-after-open-hook . #'lsp-origami-try-enable))
+;; TODO AI: We need to work more on this.
+;; (after! treesit-fold
+;;   ;; Make folding work from anywhere within a foldable construct
+;;   (defun treesit-fold--find-foldable-node-at-point ()
+;;     "Find a foldable node at or around point."
+;;     (let ((node (treesit-node-at (point)))
+;;           (foldable-types (mapcar #'car (alist-get major-mode treesit-fold-range-alist))))
+;;       ;; First check if current node is already foldable
+;;       (if (member (treesit-node-type node) foldable-types)
+;;           node
+;;         ;; Otherwise, look for foldable nodes in the ancestry and their children
+;;         (let ((current node))
+;;           (while current
+;;             ;; Check if current node has foldable children
+;;             (let ((foldable-child (seq-find
+;;                                   (lambda (child)
+;;                                     (member (treesit-node-type child) foldable-types))
+;;                                   (treesit-node-children current nil))))
+;;               (when foldable-child
+;;                 (cl-return foldable-child)))
+;;             (setq current (treesit-node-parent current)))
+;;           nil))))
+
+;;   ;; Override the default node finding behavior
+;;   (advice-add 'treesit-fold-close :around
+;;               (lambda (orig-fun)
+;;                 (let ((node (treesit-fold--find-foldable-node-at-point)))
+;;                   (if node
+;;                       (let ((pos (treesit-node-start node)))
+;;                         (save-excursion
+;;                           (goto-char pos)
+;;                           (funcall orig-fun)))
+;;                     (funcall orig-fun)))))
+
+;;   (advice-add 'treesit-fold-open :around
+;;               (lambda (orig-fun)
+;;                 (let ((node (treesit-fold--find-foldable-node-at-point)))
+;;                   (if node
+;;                       (let ((pos (treesit-node-start node)))
+;;                         (save-excursion
+;;                           (goto-char pos)
+;;                           (funcall orig-fun)))
+;;                     (funcall orig-fun))))))
 ```
 
 
@@ -2472,6 +2676,16 @@ Override to use the latest version from Github.
 ```emacs-lisp
 (package! apheleia :recipe (:repo "radian-software/apheleia"))
 ```
+
+<!--list-separator-->
+
+-  WS Butler
+
+    An unobtrusive way to trim spaces from end of lines.
+
+    ```emacs-lisp
+    (package! ws-butler)
+    ```
 
 
 #### Just {#just}
@@ -2607,6 +2821,13 @@ Default keybindings for this package is:
 
 
 #### Version Control System {#version-control-system}
+
+Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-fold`.
+
+```emacs-lisp
+(after! diff-hl
+  (diff-hl-margin-mode 1))
+```
 
 <!--list-separator-->
 
@@ -2815,6 +3036,21 @@ The below settings are basically just copied of [tecosaur's](https://tecosaur.gi
 ```
 
 
+#### Mise {#mise}
+
+Enable automatic detection of language versions using [mise-en-place](https://mise.jdx.dev).
+
+```emacs-lisp
+(package! mise
+  :recipe (:host github :repo "eki3z/mise.el" :files ("*.el")))
+```
+
+```emacs-lisp
+(require 'mise)
+(add-hook 'after-init-hook #'global-mise-mode)
+```
+
+
 #### Outshine {#outshine}
 
 Outshine attempts to bring the look and feel of `org-mode` to the world outside Org major mode.
@@ -2867,6 +3103,7 @@ Set some sensible `projectile` settings.
       projectile-globally-ignored-directories '(".git"          ;; I never want to cache files in these directories
                                                 ".idea"
                                                 ".import"
+                                                ".expert"
                                                 ".elixir_ls"
                                                 ".htmlcov"
                                                 ".pytest_cache"
@@ -2875,11 +3112,30 @@ Set some sensible `projectile` settings.
                                                 "deps"
                                                 "node_modules"))
 
-;; DEPRECATED: Remove when projectile is replaced with project.el
+;; Elixir umbrella project detection
+(defun projectile-elixir-umbrella-root (dir)
+  "Find the Elixir umbrella project root if DIR is inside one."
+  (when-let* ((current-dir (or dir default-directory))
+              (project-dir (locate-dominating-file current-dir "mix.exs")))
+    ;; Check if this project is inside an apps/ directory
+    (let* ((project-path (directory-file-name project-dir))
+           (parent-dir (file-name-directory project-path)))
+      (when (and parent-dir
+                 (string-match-p "/apps/?$" parent-dir))
+        ;; We're inside an apps/ directory, look for umbrella root
+        (let ((umbrella-root (file-name-directory (directory-file-name parent-dir))))
+          (when (file-exists-p (expand-file-name "mix.exs" umbrella-root))
+            umbrella-root))))))
 
 (after! projectile
-  (dolist (file '("mix.exs" "*.csproj" "*.fsproj"))
-    (add-to-list 'projectile-project-root-files file)))
+  ;; Add C# and F# project files as root markers
+  (dolist (file '("*.csproj" "*.fsproj"))
+    (add-to-list 'projectile-project-root-files file))
+
+  ;; Add umbrella detection function to the beginning of the list
+  ;; This ensures umbrella projects are detected before individual apps
+  (add-to-list 'projectile-project-root-functions
+               #'projectile-elixir-umbrella-root))
 ```
 
 
@@ -3129,6 +3385,19 @@ We usually don't need this package right away, so we'll delay the loading a bit.
 > From the `:term vterm` module
 
 ```emacs-lisp
+(package! vterm-anti-flicker-filter :pin "b17b013"
+  :recipe (:host github :repo "martinbaillie/vterm-anti-flicker-filter" :files ("*.el")))
+```
+
+Load `vterm-anti-flicker-filter` before `vterm` so the hook attaches properly:
+
+```emacs-lisp
+(use-package! vterm-anti-flicker-filter
+  :defer t
+  :hook (vterm-mode . vterm-anti-flicker-filter-enable))
+```
+
+```emacs-lisp
 (map! :after vterm
       :map vterm-mode-map
       :i "C-j"  (lambda () (interactive) (vterm-send-key "<down>"))
@@ -3199,8 +3468,15 @@ be active for. For a quick guide on how we can organize snippets, take a look at
 
 The [highlight-indent-guides](https://github.com/DarthFennec/highlight-indent-guides) minor mode package can be useful in certain `prog-modes`.
 
+Doom already enables `indent-bars` via the `:ui indent-guides` module and sets `indent-bars-prefer-character t`
+on macOS (bitmaps are slower on Mac). We add performance optimizations:
+
 ```emacs-lisp
-(add-hook! 'prog-mode-hook #'indent-bars-mode)
+(after! indent-bars
+  ;; Performance optimizations
+  (setq indent-bars-treesit-support nil          ; Disable tree-sitter scope detection (significant overhead)
+        indent-bars-display-on-blank-lines nil   ; Don't render on blank lines (reduces fontification work)
+        indent-bars-depth-update-delay 0.1))     ; Slightly slower updates during scrolling (default 0.075)
 ```
 
 
@@ -3352,8 +3628,20 @@ For some file types, we overwrite defaults in the snippets directory, others nee
         lsp-auto-guess-root t
         lsp-file-watch-threshold 1000000
         lsp-idle-delay 0.500
+        lsp-keep-workspace-alive nil
         lsp-modeline-code-actions-segments '(count icon name)
-        lsp-response-timeout 10))
+        lsp-response-timeout 10)
+
+  (defun cust/kill-lsp-child-processes (workspace)
+    "Kill child processes of WORKSPACE's LSP server.
+Some LSP servers spawn child processes that don't get cleaned up
+when the workspace is shut down. This ensures orphaned processes
+are terminated."
+    (when-let* ((proc (lsp--workspace-proc workspace))
+                (pid (process-id proc)))
+      (call-process "pkill" nil nil nil "-P" (number-to-string pid))))
+
+  (add-hook 'lsp-after-uninitialized-functions #'cust/kill-lsp-child-processes))
 
 (after! lsp-ui
   (define-key lsp-ui-mode-map [remap xref-find-definitions] #'lsp-ui-peek-find-definitions)
@@ -3368,34 +3656,34 @@ For some file types, we overwrite defaults in the snippets directory, others nee
     of LSP mode. See build instructions in the Github repository.
 
     ```emacs-lisp
-    (defun lsp-booster--advice-json-parse (old-fn &rest args)
-      "Try to parse bytecode instead of json."
-      (or
-       (when (equal (following-char) ?#)
-         (let ((bytecode (read (current-buffer))))
-           (when (byte-code-function-p bytecode)
-             (funcall bytecode))))
-       (apply old-fn args)))
-    (advice-add (if (progn (require 'json)
-                           (fboundp 'json-parse-buffer))
-                    'json-parse-buffer
-                  'json-read)
-                :around
-                #'lsp-booster--advice-json-parse)
+    ;; (defun lsp-booster--advice-json-parse (old-fn &rest args)
+    ;;   "Try to parse bytecode instead of json."
+    ;;   (or
+    ;;    (when (equal (following-char) ?#)
+    ;;      (let ((bytecode (read (current-buffer))))
+    ;;        (when (byte-code-function-p bytecode)
+    ;;          (funcall bytecode))))
+    ;;    (apply old-fn args)))
+    ;; (advice-add (if (progn (require 'json)
+    ;;                        (fboundp 'json-parse-buffer))
+    ;;                 'json-parse-buffer
+    ;;               'json-read)
+    ;;             :around
+    ;;             #'lsp-booster--advice-json-parse)
 
-    (defun lsp-booster--advice-final-command (old-fn cmd &optional test?)
-      "Prepend emacs-lsp-booster command to lsp CMD."
-      (let ((orig-result (funcall old-fn cmd test?)))
-        (if (and (not test?)                             ;; for check lsp-server-present?
-                 (not (file-remote-p default-directory)) ;; see lsp-resolve-final-command, it would add extra shell wrapper
-                 lsp-use-plists
-                 (not (functionp 'json-rpc-connection))  ;; native json-rpc
-                 (executable-find "emacs-lsp-booster"))
-            (progn
-              (message "Using emacs-lsp-booster for %s!" orig-result)
-              (cons "emacs-lsp-booster" orig-result))
-          orig-result)))
-    (advice-add 'lsp-resolve-final-command :around #'lsp-booster--advice-final-command)
+    ;; (defun lsp-booster--advice-final-command (old-fn cmd &optional test?)
+    ;;   "Prepend emacs-lsp-booster command to lsp CMD."
+    ;;   (let ((orig-result (funcall old-fn cmd test?)))
+    ;;     (if (and (not test?)                             ;; for check lsp-server-present?
+    ;;              (not (file-remote-p default-directory)) ;; see lsp-resolve-final-command, it would add extra shell wrapper
+    ;;              lsp-use-plists
+    ;;              (not (functionp 'json-rpc-connection))  ;; native json-rpc
+    ;;              (executable-find "emacs-lsp-booster"))
+    ;;         (progn
+    ;;           (message "Using emacs-lsp-booster for %s!" orig-result)
+    ;;           (cons "emacs-lsp-booster" orig-result))
+    ;;       orig-result)))
+    ;; (advice-add 'lsp-resolve-final-command :around #'lsp-booster--advice-final-command)
     ```
 
 
@@ -3448,6 +3736,13 @@ Use [treesit-auto](https://github.com/renzmann/treesit-auto) to automatically in
   :custom
   (treesit-auto-install 'prompt)
   :config
+  ;; Pre-compute available grammars once at startup to avoid slow runtime checks
+  ;; on every file open. This scans once instead of on each set-auto-mode call.
+  ;; This gives a MAJOR boost in increasing the time it takes to load files!!
+  (setq treesit-auto-langs
+        (cl-loop for recipe in treesit-auto-recipe-list
+                 when (treesit-language-available-p (treesit-auto-recipe-lang recipe))
+                 collect (treesit-auto-recipe-lang recipe)))
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
 ```
@@ -3485,7 +3780,7 @@ It’s nice to see ANSI colour codes displayed. However, until Emacs 28 it’s n
 Everybody likes org-mode!
 
 ```emacs-lisp
-(setq org-directory                             "~/OneDrive/org"
+(setq org-directory                             (concat (file-name-as-directory user-home-directory) "OneDrive/org")
       org-cliplink-transport-implementation     'curl
       org-crypt-key                             "rhblind@gmail.com"
       org-tag-alist                             '(("crypt" . ?c))
@@ -3648,19 +3943,21 @@ TODO Organize this better
 ```
 
 ```emacs-lisp
-(cl-defmethod org-roam-node-type ((node org-roam-node))
-  "Return the TYPE of NODE."
-  (condition-case nil
-      (file-name-nondirectory
-       (directory-file-name
-        (file-name-directory
-         (file-relative-name (org-roam-node-file node) org-roam-directory))))
-    (error "")))
+(after! org-roam
+  (cl-defmethod org-roam-node-type ((node org-roam-node))
+    "Return the TYPE of NODE."
+    (condition-case nil
+        (file-name-nondirectory
+         (directory-file-name
+          (file-name-directory
+           (file-relative-name (org-roam-node-file node) org-roam-directory))))
+      (error ""))))
 ```
 
 ```emacs-lisp
-(setq org-roam-node-display-template
-      (concat "${type:15} ${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+(after! org-roam
+  (setq org-roam-node-display-template
+        (concat "${type:15} ${title:*} " (propertize "${tags:10}" 'face 'org-tag))))
 ```
 
 Ensure org-roam database is properly initialized and maintained:
@@ -4400,16 +4697,139 @@ Remap `typescript-mode` to the tree-sitter equivalent.
 Hook up some extra tooling...
 
 ```emacs-lisp
+(defun cust/typescript-lsp-maybe ()
+  "Start LSP for TypeScript only if not in a Deno project.
+Deno projects use deno-ls via their own mode hooks."
+  (unless (deno-ts-project-p)
+    (lsp!)))
+
+(defun cust/typescript-prettier-maybe ()
+  "Enable prettier-mode only if not in a Deno project."
+  (unless (deno-ts-project-p)
+    (prettier-mode 1)))
+
 (use-package! typescript-ts-mode
-  :hook (typescript-ts-mode . prettier-mode)
+  :hook (typescript-ts-mode . cust/typescript-prettier-maybe)
   :config
-  (add-hook! '(typescript-ts-mode-hook tsx-ts-mode-hook) #'lsp!))
+  (add-hook! '(typescript-ts-mode-hook tsx-ts-mode-hook) #'cust/typescript-lsp-maybe))
 ```
 
-... and optionally disable the old `typescript-mode`.
+
+#### Deno {#deno}
+
+This section configures support for Deno, inspired by [this post](https://www.mgmarlow.com/words/2023-08-31-deno-tree-sitter-emacs/).
+
+First we need a way to know if we're in a Deno project or not.
 
 ```emacs-lisp
-;; (package! typescript-mode :disable t)
+(defun deno-ts-project-p ()
+  "Return non-nil if current buffer is in a Deno project.
+Checks for deno.json or deno.jsonc in any parent directory."
+  (let ((dir (or (and buffer-file-name (file-name-directory buffer-file-name))
+                 default-directory)))
+    (or (locate-dominating-file dir "deno.json")
+        (locate-dominating-file dir "deno.jsonc"))))
+```
+
+Override the default apheleia deno formatters to include the `--config` flag.
+This ensures `deno fmt` finds the project's `deno.json` with formatting options like `singleQuote`.
+
+```emacs-lisp
+(after! apheleia
+  (setf (alist-get 'denofmt-ts apheleia-formatters)
+        '("deno" "fmt" "-" "--ext" "ts"
+          (when-let ((config (locate-dominating-file default-directory "deno.json")))
+            (list "--config" (expand-file-name "deno.json" config)))))
+  (setf (alist-get 'denofmt-tsx apheleia-formatters)
+        '("deno" "fmt" "-" "--ext" "tsx"
+          (when-let ((config (locate-dominating-file default-directory "deno.json")))
+            (list "--config" (expand-file-name "deno.json" config)))))
+  (setf (alist-get 'denofmt-js apheleia-formatters)
+        '("deno" "fmt" "-" "--ext" "js"
+          (when-let ((config (locate-dominating-file default-directory "deno.json")))
+            (list "--config" (expand-file-name "deno.json" config)))))
+  (setf (alist-get 'denofmt-json apheleia-formatters)
+        '("deno" "fmt" "-" "--ext" "json"
+          (when-let ((config (locate-dominating-file default-directory "deno.json")))
+            (list "--config" (expand-file-name "deno.json" config)))))
+  (setf (alist-get 'denofmt-md apheleia-formatters)
+        '("deno" "fmt" "-" "--ext" "md"
+          (when-let ((config (locate-dominating-file default-directory "deno.json")))
+            (list "--config" (expand-file-name "deno.json" config))))))
+```
+
+Define new major modes for Deno. We'll activate these modes if we're in a Deno project.
+
+```emacs-lisp
+;; Deno TypeScript mode (for .ts files)
+(define-derived-mode deno-ts-mode typescript-ts-mode "Deno[TS]"
+  "Major mode for Deno TypeScript files."
+  :group 'deno
+  (setq-local apheleia-formatter 'denofmt-ts)
+  ;; Disable TypeScript LSP servers - we use deno-ls instead
+  (setq-local lsp-disabled-clients '(ts-ls jsts-ls)))
+
+;; Deno TSX mode (for .tsx files)
+(define-derived-mode deno-tsx-mode tsx-ts-mode "Deno[TSX]"
+  "Major mode for Deno TSX files."
+  :group 'deno
+  (setq-local apheleia-formatter 'denofmt-tsx)
+  (setq-local lsp-disabled-clients '(ts-ls jsts-ls)))
+
+;; Deno JavaScript mode (for .js files)
+(define-derived-mode deno-js-mode js-ts-mode "Deno[JS]"
+  "Major mode for Deno JavaScript files."
+  :group 'deno
+  (setq-local apheleia-formatter 'denofmt-js)
+  (setq-local lsp-disabled-clients '(ts-ls jsts-ls)))
+
+;; Deno JSON mode (for .json files)
+(define-derived-mode deno-json-mode json-ts-mode "Deno[JSON]"
+  "Major mode for Deno JSON files."
+  :group 'deno
+  (setq-local apheleia-formatter 'denofmt-json))
+
+;; Deno Markdown mode (for .md files)
+(define-derived-mode deno-md-mode markdown-mode "Deno[MD]"
+  "Major mode for Deno Markdown files."
+  :group 'deno
+  (setq-local apheleia-formatter 'denofmt-md))
+
+;; Auto-switch to Deno modes after the base mode is set
+;; This runs after treesit-auto has set up the tree-sitter mode
+(defun deno--maybe-activate-deno-mode ()
+  "Switch to appropriate Deno mode if in a Deno project."
+  (when (deno-ts-project-p)
+    (pcase major-mode
+      ('typescript-ts-mode (deno-ts-mode))
+      ('tsx-ts-mode (deno-tsx-mode))
+      ('js-ts-mode (deno-js-mode))
+      ('json-ts-mode (deno-json-mode))
+      ('markdown-mode (deno-md-mode)))))
+
+(add-hook 'after-change-major-mode-hook #'deno--maybe-activate-deno-mode)
+
+;; Register Deno LSP server
+(defun deno--register-lsp-client ()
+  "Register the Deno LSP client if not already properly registered."
+  (require 'lsp-mode)
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection
+                     (lambda () (list (or (executable-find "deno") "deno") "lsp")))
+    :major-modes '(deno-ts-mode deno-tsx-mode deno-js-mode)
+    :priority 10
+    :server-id 'deno-ls
+    :initialization-options (lambda () (list :clientInfo (list :name "deno-ls")))
+    :notification-handlers (lsp-ht ("window/logMessage" 'ignore))
+    :add-on? nil)))
+
+(defun deno--lsp-start ()
+  "Ensure Deno LSP client is registered and start LSP."
+  (deno--register-lsp-client)
+  (lsp))
+
+(add-hook! '(deno-ts-mode-hook deno-tsx-mode-hook deno-js-mode-hook) #'deno--lsp-start)
 ```
 
 
@@ -4458,8 +4878,6 @@ $ pip3 install debugpy --user
 Use the latest and greatest!
 
 ```emacs-lisp
-(unpin! (:lang elixir))
-(unpin! elixir-mode)
 (package! flycheck-dialyxir)
 ```
 
@@ -4478,54 +4896,24 @@ Use the latest and greatest!
 ```
 
 
-#### ElixirLS {#elixirls}
-
-The "default" language server for Elixir. A bit slow and heavy on memory usage, but packed with most features.
-[See this thread](https://elixirforum.com/t/emacs-elixir-setup-configuration-wiki/19196/194)
-
-```emacs-lisp
-(after! (lsp-mode elixir-mode)
-  (add-hook! 'lsp-after-initialize-hook
-             (lambda ()
-               ;; Disable the ElixirLS Dialyzer
-               (setq lsp-elixir-dialyzer-enabled nil))))
-```
-
-Available options
-
-```emacs-lisp
-;; (lsp-register-custom-settings
-;;  '(("elixirLS.dialyzerEnabled" lsp-elixir-dialyzer-enabled t)
-;;    ("elixirLS.dialyzerWarnOpts" lsp-elixir-dialyzer-warn-opts)
-;;    ("elixirLS.dialyzerFormat" lsp-elixir-dialyzer-format)
-;;    ("elixirLS.mixEnv" lsp-elixir-mix-env)
-;;    ("elixirLS.mixTarget" lsp-elixir-mix-target)
-;;    ("elixirLS.projectDir" lsp-elixir-project-dir)
-;;    ("elixirLS.fetchDeps" lsp-elixir-fetch-deps t)
-;;    ("elixirLS.suggestSpecs" lsp-elixir-suggest-specs t)
-;;    ("elixirLS.signatureAfterComplete" lsp-elixir-signature-after-complete t)
-;;    ("elixirLS.enableTestLenses" lsp-elixir-enable-test-lenses t)))
-```
-
-```emacs-lisp
-;; (after! lsp-mode
-;;   (defvar lsp-elixir--config-options (make-hash-table))
-
-;;   ;; Disable Dialyzer in elixir-ls
-;;   (puthash "dialyzerEnabled" :json-false lsp-elixir--config-options)
-
-;;   (add-hook! 'lsp-after-initialize-hook
-;;              (lambda () (lsp--set-configuration `(:elixirLS, lsp-elixir--config-options)))))
-```
-
-
-#### ExpertLSP {#expertlsp}
+#### Expert LSP {#expert-lsp}
 
 The official language server for Elixir.
 
 ```emacs-lisp
-;; (after! (lsp-mode elixir-mode)
-;;   (add-hook! 'lsp-elixir-server-command '("~/.local/bin/expert_darwin_arm64")))
+(after! lsp-mode
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection
+                     (lambda () (list (concat user-home-directory ".local/bin/expert_darwin_arm64") "--stdio")))
+    :major-modes '(elixir-mode elixir-ts-mode heex-ts-mode)
+    :priority 1
+    :server-id 'expert-ls
+    :initialization-options (lambda () (list :clientInfo (list :name "expert-ls")))
+    :notification-handlers (lsp-ht ("window/logMessage" 'ignore))
+    :add-on? nil)))
+
+(add-hook! 'elixir-ts-mode-hook #'lsp)
 ```
 
 
@@ -4549,32 +4937,35 @@ The official language server for Elixir.
 
 ### C-Sharp {#c-sharp}
 
-**Step 1**
 Remap `csharp-mode` to the tree-sitter equivalent.
 
 ```emacs-lisp
 (add-list-to-list 'major-mode-remap-alist '((csharp-mode . csharp-ts-mode)))
-(add-hook! 'csharp-ts-mode-hook #'lsp)
 ```
 
 ```emacs-lisp
-(defun my-csharp-prettify-cleanup ()
-  "Remove unwanted prettify symbols from C# tree-sitter mode."
-  (when (eq major-mode 'csharp-ts-mode)
-    (require 'cl-lib)
-    (let ((original-alist prettify-symbols-alist))
-      (setq-local prettify-symbols-alist
-                  (cl-remove-if (lambda (pair)
-                                  (member (car pair) '("List" "bool" "string" "float" "int" "true" "false")))
-                                prettify-symbols-alist))
-      ;; Force refresh if prettify-symbols-mode is active
-      (when (and (boundp 'prettify-symbols-mode) prettify-symbols-mode)
-        (prettify-symbols-mode -1)
-        (prettify-symbols-mode 1)))))
+;; Disable prettify-symbols-mode for C# modes
+(defun +csharp--disable-prettify-symbols-a (&rest _)
+  "Prevent prettify-symbols-mode from being enabled in C# buffers."
+  (when (or (eq major-mode 'csharp-mode)
+            (eq major-mode 'csharp-ts-mode))
+    nil))
 
-(add-hook 'csharp-ts-mode-hook
-          (lambda ()
-            (run-with-timer 0.2 nil #'my-csharp-prettify-cleanup)))
+(advice-add 'prettify-symbols-mode :before-while #'+csharp--disable-prettify-symbols-a)
+```
+
+Install `CSharpier` globally or as a local tool:
+
+```shell
+$ dotnet tool install -g csharpier        # global
+$ dotnet tool install csharpier           # local (uses .config/dotnet-tools.json)
+```
+
+```emacs-lisp
+(after! apheleia
+  ;; Override csharpier to use `dotnet csharpier` for local tool support.
+  (setf (alist-get 'csharpier apheleia-formatters)
+        '("dotnet" "csharpier" "format" "--write-stdout")))
 ```
 
 C-sharp is supported by default in newer versions of Emacs through `csharp-tree-sitter-mode`.
@@ -4584,7 +4975,6 @@ Install the `dotnet` package as well to get some extra goodies.
 (package! dotnet)
 ```
 
-**Step 2** - Install grammar files
 Execute `M-x treesit-install-language-grammar` and enter `c-sharp`.  When prompted if you want to do it interactively, enter "Yes",
 and paste the Github repository (`tree-sitter/tree-sitter-c-sharp`) for the grammar files.
 Just keep pressing `<enter>` to accept defaults for the rest of the process.
@@ -4593,22 +4983,35 @@ Just keep pressing `<enter>` to accept defaults for the rest of the process.
 #### LSP Dotnet {#lsp-dotnet}
 
 ```emacs-lisp
-(add-hook! 'csharp-ts-mode-hook #'lsp)
+;; Override lsp-roslyn package version to get the latest version
+;; (setq lsp-roslyn-package-version "5.0.0-2.25458.10")  ;; using csharp-ls built from source instead
+;; Use lsp-deferred to avoid blocking file loading - LSP starts when Emacs is idle
+(add-hook! 'csharp-ts-mode-hook #'lsp-deferred)
 ```
 
 ```emacs-lisp
 (use-package! dotnet
-  :hook ((csharp-ts-mode . dotnet-mode))
+  :defer t  ; Don't load until explicitly needed
+  :commands (dotnet-mode dotnet-run dotnet-build dotnet-test)
   :config
-  (setq dotnet-project-search-max-depth 10) ; Search up to 10 directories for project files
-  (add-hook 'dotnet-mode-hook
-            (lambda ()
-              (setq-local dotnet-project-directory
-                         (or (locate-dominating-file default-directory "*.sln")
-                             (locate-dominating-file default-directory "*.csproj")
-                             (locate-dominating-file default-directory "*.fsproj")
-                             default-directory))))
-)
+  (setq dotnet-project-search-max-depth 5)) ; Reduce search depth for faster lookups
+
+;; Defer dotnet-mode activation to idle time
+(defun +csharp--setup-dotnet-mode-deferred ()
+  "Set up dotnet-mode after a short delay to avoid blocking file loading."
+  (run-with-idle-timer
+   1.0 nil
+   (lambda ()
+     (when (and (buffer-live-p (current-buffer))
+                (derived-mode-p 'csharp-ts-mode 'csharp-mode))
+       (dotnet-mode 1)
+       ;; Set project directory lazily
+       (setq-local dotnet-project-directory
+                   (or (locate-dominating-file default-directory ".sln")
+                       (locate-dominating-file default-directory ".csproj")
+                       default-directory))))))
+
+(add-hook! 'csharp-ts-mode-hook #'+csharp--setup-dotnet-mode-deferred)
 
 (add-to-list 'auto-mode-alist
              '("\\.csproj\\'" . (lambda () (csproj-mode))))
