@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-12-08T23:13:47+01:00
+lastmod = 2025-12-10T21:21:48+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -238,7 +238,7 @@ just copy it in place whenever I'm on a new computer.
   (setq auth-source-cache-expiry nil                            ; Don't expire cached auth sources.
         epa-file-select-keys     nil                            ; If non-nil, always asks user to select recipients.
         epa-file-cache-passphrase-for-symmetric-encryption t    ; Cache passphrase for symmetrical encryptions.
-        ;; epg-pinentry-mode        'loopback                      ; Use pinentry to ask for passphrase.
+        epg-pinentry-mode        'loopback                      ; Use Emacs pinentry for passphrase prompts.
         epg-gpg-program (cond ((eq system-type 'darwin)     "/opt/homebrew/bin/gpg")
                               ((eq system-type 'gnu/linux)  "/usr/bin/gpg")
                               ((eq system-type 'windows-nt) "C:/Program Files (x86)/GNU/GnuPG/gpg2")))
@@ -249,9 +249,18 @@ just copy it in place whenever I'm on a new computer.
 ```
 
 I'm using `gpg-agent` instead of `ssh-agent` so we need to connect here.
+Update the TTY at startup and before GPG operations to avoid pinentry issues.
 
 ```emacs-lisp
-(shell-command "gpg-connect-agent updatestartuptty /bye >/dev/null")
+(defun cust/gpg-update-tty ()
+  "Update GPG agent's TTY information."
+  (shell-command "gpg-connect-agent updatestartuptty /bye >/dev/null"))
+
+;; Update at startup
+(cust/gpg-update-tty)
+
+;; Update before magit commit to ensure pinentry works
+(advice-add 'magit-commit-create :before (lambda (&rest _) (cust/gpg-update-tty)))
 ```
 
 
@@ -2067,6 +2076,7 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
                   ("C-TAB" . 'copilot-accept-completion-by-word)
                   ("C-<tab>" . 'copilot-accept-completion-by-word))
       :config
+      (setq copilot-idle-delay 0.3)  ;; Show suggestions after 0.3s of idle time
       (add-to-list 'copilot-major-mode-alist '("elixir-ts-mode" . "elixir"))
       (add-to-list 'copilot-indentation-alist '(elixir-ts-mode elixir-ts-indent-offset))
     )
@@ -2158,6 +2168,48 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
                                           (cons "anthropic-version" "2023-06-01")))
                           :models '(claude-sonnet-4-5 claude-opus-4-5 claude-haiku-4-5))
           gptel-model 'claude-sonnet-4-5)
+    ```
+
+    Cancel any pending `gptel` commit message generation when navigating commit history with `M-p` / `M-n`.
+
+    ```emacs-lisp
+    (defvar cust/gptel-commit-cancelled nil
+      "Non-nil when gptel commit generation was cancelled.")
+
+    (defvar cust/gptel-magit-saved-callback nil
+      "Stored callback for gptel-magit cancellation handling.")
+
+    (defun cust/gptel-abort-before-commit-nav (&rest _)
+      "Abort any pending gptel request before navigating commit history."
+      (setq cust/gptel-commit-cancelled t)
+      (when (fboundp 'gptel-abort)
+        (ignore-errors (gptel-abort))))
+
+    (defun cust/gptel-magit-callback-wrapper (message)
+      "Callback wrapper that checks cancellation flag."
+      (if cust/gptel-commit-cancelled
+          (message "gptel commit message cancelled")
+        (when cust/gptel-magit-saved-callback
+          (funcall cust/gptel-magit-saved-callback message))))
+
+    (defun cust/gptel-magit-generate-wrapper (orig-fn cb)
+      "Wrap gptel-magit--generate to check cancellation flag."
+      ;; Clear cancelled flag when starting new request
+      (setq cust/gptel-commit-cancelled nil)
+      (setq cust/gptel-magit-saved-callback cb)
+      (funcall orig-fn #'cust/gptel-magit-callback-wrapper))
+
+    (after! git-commit
+      (advice-add 'git-commit-prev-message :before #'cust/gptel-abort-before-commit-nav)
+      (advice-add 'git-commit-next-message :before #'cust/gptel-abort-before-commit-nav))
+
+    (after! gptel-magit
+      (advice-add 'gptel-magit--generate :around #'cust/gptel-magit-generate-wrapper)
+
+      ;; Customize the commit prompt to prevent markdown formatting
+      (setq gptel-magit-commit-prompt
+            (concat gptel-magit-prompt-conventional-commits
+                    "\n\nIMPORTANT: Return ONLY the raw commit message text. Do NOT wrap the output in markdown code blocks, backticks, or any other formatting. No ``` before or after.")))
     ```
 
 
@@ -2563,6 +2615,40 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
                   (kill-word 1))))
           (kill-region cp (1+ cp)))  ;; word is non-English word
         ))
+
+    (defun cust/smart-tab ()
+    "Smart TAB for Evil insert mode.
+    Prioritizes completions over indentation:
+    - If Corfu popup is visible → complete the selection
+    - If Copilot suggestion is showing → accept it
+    - Otherwise → indent the current line"
+    (interactive)
+    (cond
+    ;; Corfu popup frame is actually visible
+    ((and (bound-and-true-p corfu-mode)
+            (boundp 'corfu--frame)
+            corfu--frame
+            (frame-visible-p corfu--frame))
+        (corfu-complete))
+    ;; Copilot overlay is actually visible in current buffer
+    ((and (bound-and-true-p copilot-mode)
+            (boundp 'copilot--overlay)
+            copilot--overlay
+            (overlayp copilot--overlay)
+            (overlay-buffer copilot--overlay))
+        (copilot-accept-completion))
+    ;; Default: insert one indent level
+    (t
+        (cust/smart-tab-indent))))
+
+    (defun cust/smart-tab-indent ()
+      "Insert one level of indentation based on current mode settings."
+      (if indent-tabs-mode
+          (insert "\t")
+        (insert (make-string (or (bound-and-true-p evil-shift-width)
+                                 tab-width
+                                 4)
+                             ?\s))))
     ```
 
 <!--list-separator-->
@@ -2596,7 +2682,11 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
       (advice-add 'evil-ex-search-next     :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-ex-search-previous :after #'evil-scroll-to-center-advice)
       (advice-add 'evil-scroll-up          :after #'evil-scroll-to-center-advice)
-      (advice-add 'evil-scroll-down        :after #'evil-scroll-to-center-advice))
+      (advice-add 'evil-scroll-down        :after #'evil-scroll-to-center-advice)
+
+      ;; Smart TAB in insert mode: completions take priority over indentation
+      (define-key evil-insert-state-map (kbd "TAB") #'cust/smart-tab)
+      (define-key evil-insert-state-map (kbd "<tab>") #'cust/smart-tab))
     ```
 
     Sometimes it's convenient to insert multiple cursors using the mouse. Inserts a new cursor using `C-S-<mouse-1>`.
@@ -4982,9 +5072,38 @@ Just keep pressing `<enter>` to accept defaults for the rest of the process.
 
 #### LSP Dotnet {#lsp-dotnet}
 
+Use `csharp-ls` as the language server. If a project has `csharp-ls` installed as a local dotnet tool
+(in `.config/dotnet-tools.json`), use that version. Otherwise, fall back to the globally installed
+version at `~/.local/bin/csharp-ls`.
+
 ```emacs-lisp
-;; Override lsp-roslyn package version to get the latest version
-;; (setq lsp-roslyn-package-version "5.0.0-2.25458.10")  ;; using csharp-ls built from source instead
+(after! lsp-mode
+  (defun +csharp--project-has-local-csharp-ls-p ()
+    "Check if the current project has csharp-ls as a local dotnet tool."
+    (when-let* ((project-root (or (lsp-workspace-root)
+                                  (locate-dominating-file default-directory ".sln")
+                                  (locate-dominating-file default-directory ".csproj")))
+                (tools-file (expand-file-name ".config/dotnet-tools.json" project-root)))
+      (when (file-exists-p tools-file)
+        (condition-case nil
+            (let* ((json-object-type 'alist)
+                   (json-array-type 'list)
+                   (content (json-read-file tools-file))
+                   (tools (alist-get 'tools content)))
+              (assoc 'csharp-ls tools))
+          (error nil)))))
+
+  (defun +csharp--cls-find-executable ()
+    "Find csharp-ls executable, preferring project-local over global.
+If project has csharp-ls as a local dotnet tool, use `dotnet tool run csharp-ls`.
+Otherwise, use the global installation at ~/.local/bin/csharp-ls."
+    (if (+csharp--project-has-local-csharp-ls-p)
+        (list "dotnet" "tool" "run" "csharp-ls")
+      (expand-file-name "~/.local/bin/csharp-ls")))
+
+  ;; Override the default executable finder
+  (advice-add 'lsp-csharp--cls-find-executable :override #'+csharp--cls-find-executable))
+
 ;; Use lsp-deferred to avoid blocking file loading - LSP starts when Emacs is idle
 (add-hook! 'csharp-ts-mode-hook #'lsp-deferred)
 ```
@@ -5014,7 +5133,7 @@ Just keep pressing `<enter>` to accept defaults for the rest of the process.
 (add-hook! 'csharp-ts-mode-hook #'+csharp--setup-dotnet-mode-deferred)
 
 (add-to-list 'auto-mode-alist
-             '("\\.csproj\\'" . (lambda () (csproj-mode))))
+             '("\\.csproj\\'" . csproj-mode))
 ```
 
 
