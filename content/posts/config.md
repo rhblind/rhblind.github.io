@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-12-11T00:30:47+01:00
+lastmod = 2025-12-11T22:55:49+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -591,9 +591,6 @@ Emacs 27+ introduces early-init.el, which is run before init.el, before package 
       menu-bar-mode nil
       scroll-bar-mode nil)
 
-;; Reduce the frequency of which Emacs performs garbage collection during startup
-(setq gc-cons-percentage 0.6)
-
 ;; Increase the amount of data Emacs reads from processes
 (setq read-process-output-max (* 3 1024 1024)) ;; 3mb
 
@@ -661,9 +658,6 @@ Configure native compilation for better performance with Emacs 28+.
 
   ;; Set native compilation speed (0-3, higher is faster but uses more resources)
   (setq native-comp-speed 2)
-
-  ;; Enable native compilation for all installed packages
-  (setq package-native-compile t)
 
   ;; Compile ahead of time for better startup performance
   (setq native-comp-deferred-compilation t
@@ -1607,7 +1601,7 @@ The following is rather long, but it essentially
   (nth (random (length splash-phrase-sources)) (mapcar #'car splash-phrase-sources))
   "The default phrase set. See `splash-phrase-sources'.")
 
-(defun splase-phrase-set-random-set ()
+(defun splash-phrase-set-random-set ()
   "Set a new random splash phrase set."
   (interactive)
   (setq splash-phrase-set
@@ -1615,16 +1609,16 @@ The following is rather long, but it essentially
              (cl-set-difference (mapcar #'car splash-phrase-sources) (list splash-phrase-set))))
   (+doom-dashboard-reload t))
 
-(defvar splase-phrase--cache nil)
+(defvar splash-phrase--cache nil)
 
 (defun splash-phrase-get-from-file (file)
   "Fetch a random line from FILE."
-  (let ((lines (or (cdr (assoc file splase-phrase--cache))
+  (let ((lines (or (cdr (assoc file splash-phrase--cache))
                    (cdar (push (cons file
                                      (with-temp-buffer
                                        (insert-file-contents (expand-file-name file splash-phrase-source-folder))
                                        (split-string (string-trim (buffer-string)) "\n")))
-                               splase-phrase--cache)))))
+                               splash-phrase--cache)))))
     (nth (random (length lines)) lines)))
 
 (defun splash-phrase (&optional set)
@@ -1950,22 +1944,6 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
 <!--list-separator-->
 
--  Azure Claude Configuration
-
-    Shared configuration for Claude via Azure Foundry, used by both gptel and Minuet.
-
-    ```emacs-lisp
-    ;; Add to ~/.authinfo.gpg:
-    ;;   machine dadp-openai-us2-resource.openai.azure.com login apikey password YOUR_API_KEY
-    (defvar azure-claude-host "dadp-openai-us2-resource.openai.azure.com")
-
-    (defun cust/azure-claude-api-key ()
-      "Retrieve Azure Claude API key from auth-source."
-      (auth-source-pick-first-password :host azure-claude-host :user "apikey"))
-    ```
-
-<!--list-separator-->
-
 -  Minuet - AI Code Completion
 
     Minuet provides inline code completions using any LLM backend (similar to GitHub Copilot).
@@ -2021,7 +1999,7 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
     ;;   ;; Override only the necessary keys in minuet-claude-options
     ;;   (setq minuet-claude-options
     ;;         (plist-put minuet-claude-options :end-point
-    ;;                    (format "https://%s/anthropic/v1/messages" azure-claude-host)))
+    ;;                    (format "https://%s/anthropic/v1/messages" authinfo-claude-host)))
     ;;   (setq minuet-claude-options
     ;;         (plist-put minuet-claude-options :api-key #'cust/azure-claude-api-key))
     ;;   (setq minuet-claude-options
@@ -2151,23 +2129,68 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
 -  GPTEL
 
-    ```emacs-lisp
-    ;; NOTE: gptel-integrations requires minuet to be installed; it's autoloaded by gptel
-    ;; so we don't need to explicitly require it here.
+    Shared configuration for LLM API access, used by `gptel`.
 
-    ;; Set up Claude via Azure Foundry (uses azure-claude-host and cust/azure-claude-api-key defined above)
-    ;; Note: Use gptel-make-anthropic since Azure Foundry uses the Anthropic Messages API format
-    ;; Azure Foundry requires x-api-key header (like standard Anthropic API) and anthropic-version header
-    (setq gptel-backend (gptel-make-anthropic "Azure-Claude"
-                          :host (concat azure-claude-host "/anthropic")
-                          :endpoint "/v1/messages"
-                          :stream t
-                          :key #'cust/azure-claude-api-key
-                          :header (lambda ()
-                                    (list (cons "x-api-key" (cust/azure-claude-api-key))
-                                          (cons "anthropic-version" "2023-06-01")))
-                          :models '(claude-sonnet-4-5 claude-opus-4-5 claude-haiku-4-5))
-          gptel-model 'claude-sonnet-4-5)
+    Set `cust/gptel-backend-type` to switch between:
+
+    -   `'copilot` - GitHub Copilot (requires `copilot-login`)
+    -   `'claude-foundry` - Azure Foundry Claude API (work)
+    -   `'claude-api-key` - Anthropic API key (console.anthropic.com)
+
+    <!--listend-->
+
+    ```emacs-lisp
+    ;; Choose which gptel backend to use
+    (defvar cust/gptel-backend-type 'copilot
+      "Which gptel backend to use.
+    Set to `copilot' for GitHub Copilot.
+    Set to `claude-foundry' for Azure Foundry API (work).
+    Set to `claude-api-key' for Anthropic API key (console.anthropic.com).")
+
+    ;; Azure Foundry configuration
+    ;; Add to ~/.authinfo.gpg:
+    ;;   machine dadp-openai-us2-resource.openai.azure.com login apikey password YOUR_API_KEY
+    (defvar cust/claude-foundry-host "dadp-openai-us2-resource.openai.azure.com")
+
+    (defun cust/claude-foundry-api-key ()
+      "Retrieve Claude API key from auth-source for Azure Foundry."
+      (auth-source-pick-first-password :host cust/claude-foundry-host :user "apikey"))
+
+    ;; Anthropic API key configuration (console.anthropic.com)
+    ;; Add to ~/.authinfo.gpg:
+    ;;   machine api.anthropic.com login apikey password YOUR_API_KEY
+    (defvar cust/claude-api-host "api.anthropic.com")
+
+    (defun cust/claude-api-key ()
+      "Retrieve Claude API key from auth-source for Anthropic API."
+      (auth-source-pick-first-password :host cust/claude-api-host :user "apikey"))
+
+    ;; Configure gptel backend based on cust/gptel-backend-type
+    (pcase cust/gptel-backend-type
+      ('copilot
+       ;; GitHub Copilot - requires M-x copilot-login first
+       (setq gptel-backend (gptel-make-gh-copilot "Copilot")
+             gptel-model 'claude-sonnet-4.5))
+      ('claude-foundry
+       ;; Azure Foundry uses the Anthropic Messages API format
+       ;; Requires x-api-key header and anthropic-version header
+       (setq gptel-backend (gptel-make-anthropic "Azure-Claude"
+                             :host (concat cust/claude-foundry-host "/anthropic")
+                             :endpoint "/v1/messages"
+                             :stream t
+                             :key #'cust/claude-foundry-api-key
+                             :header (lambda ()
+                                       (list (cons "x-api-key" (cust/claude-foundry-api-key))
+                                             (cons "anthropic-version" "2023-06-01")))
+                             :models '(claude-sonnet-4-5 claude-opus-4-5 claude-haiku-4-5))
+             gptel-model 'claude-sonnet-4-5))
+      ('claude-api-key
+       ;; Standard Anthropic API (console.anthropic.com)
+       (setq gptel-backend (gptel-make-anthropic "Claude"
+                             :stream t
+                             :key #'cust/claude-api-key
+                             :models '(claude-sonnet-4-5 claude-opus-4-5 claude-haiku-4-5))
+             gptel-model 'claude-sonnet-4-5)))
     ```
 
     Cancel any pending `gptel` commit message generation when navigating commit history with `M-p` / `M-n`.
@@ -2839,9 +2862,9 @@ Some issues I'd like to see resolved though:
 
     ```emacs-lisp
     (after! writegood-mode
-      (if (file-exists-p "/usr/local/Cellar/languagetool/5.6/libexec/languagetool-commandline.jar")
-          (setq langtool-language-tool-jar "/usr/local/Cellar/languagetool/5.6/libexec/languagetool-commandline.jar")
-          (setq langtool-autoshow-message-function #'langtool-autoshow-detail-popup))
+      (when (file-exists-p "/usr/local/Cellar/languagetool/5.6/libexec/languagetool-commandline.jar")
+        (setq langtool-language-tool-jar "/usr/local/Cellar/languagetool/5.6/libexec/languagetool-commandline.jar"
+              langtool-autoshow-message-function #'langtool-autoshow-detail-popup))
 
       ;; Ignoring these rules makes org files behave a little nicer
       (setq langtool-disabled-rules '("WHITESPACE_RULE"
@@ -2855,46 +2878,6 @@ Some issues I'd like to see resolved though:
 
 
 #### Lorem-Ipsum {#lorem-ipsum}
-
-Here's my analysis of your Emacs configuration:
-
-This is a well-structured literate Emacs configuration using Org mode with Doom Emacs as the framework. The configuration demonstrates thoughtful organization and contains many useful customizations. Here are some key observations:
-
-1.  **Structure and Organization**:
-    -   Your use of Org mode to organize your configuration is excellent, with a clear table of contents and logical sections
-    -   Good separation of concerns between UI settings, keybindings, packages, and language-specific configurations
-
-2.  **Notable Features**:
-    -   Custom splash screen with theme-appropriate SVG images
-    -   Transparent titlebar configuration for macOS
-    -   Extensive window and buffer navigation keybindings
-    -   Comprehensive dired configuration with useful extensions
-    -   Thoughtful LSP and development tool integrations
-    -   Well-configured spelling and grammar checking
-
-3.  **Smart Optimizations**:
-    -   Deferred garbage collection settings for better startup performance
-    -   Workaround for the "too many open files" error with file notifications
-    -   Font fallback detection to warn about missing required fonts
-    -   Theme switching utilities with proper reloading
-
-4.  **Modern Editor Features**:
-    -   Integration with GitHub Copilot and other LLM tools
-    -   Code folding with lsp-origami
-    -   Golden ratio for automatic window sizing
-    -   Comprehensive evil-mode configuration
-
-Some suggestions for consideration:
-
-1.  You might want to complete the Lorem-Ipsum section that appears to be incomplete at the end.
-
-2.  The file-notify workaround (clearing file watches every 5 minutes) seems like a temporary solution - you might want to investigate a more permanent fix.
-
-3.  Consider adding more documentation to your custom functions, especially the more complex ones.
-
-4.  You have some commented out code (like the dired-open-macos function) that you might want to revisit.
-
-Overall, this is an impressive and well-thought-out configuration that shows a good understanding of Emacs and attention to detail in creating a productive environment.
 
 Sometimes I need some example text to work on, use as placement holders and so on.
 
@@ -3311,7 +3294,7 @@ If flyspell is already enabled for buffer, do nothing."
 > From the `:core packages` module.
 
 ```emacs-lisp
-(after! smart-parens
+(after! smartparens
   (sp-local-pair '(org-mode) "<<" ">>" :actions '(insert)))
 ```
 
@@ -4257,6 +4240,7 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
       '(outline-4 :weight semi-bold :height 1.09)
       '(outline-5 :weight semi-bold :height 1.06)
       '(outline-6 :weight semi-bold :height 1.03)
+      '(outline-7 :weight semi-bold :height 1.01)
       '(outline-8 :weight semi-bold)
       '(outline-9 :weight semi-bold))
     ```
@@ -4307,7 +4291,6 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
           org-agenda-compact-blocks         t
           org-agenda-include-deadlines      t       ;; Include deadlines in the agenda
           org-agenda-skip-deadline-if-done  t       ;; Don't include deadlines in the agenda if they're in the `DONE' state
-          org-agenda-skip-scheduled-if-done t
           org-agenda-skip-scheduled-if-done t       ;; Don't include items in the agenda if they're in the `DONE' state
           org-agenda-tags-column            100     ;; from testing this seems to be a good value
           org-super-agenda-header-map       nil     ;; Fixes issues with evil-mode
