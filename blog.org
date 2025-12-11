@@ -1,24 +1,51 @@
 #+hugo_base_dir: ~/workspace/hugo-blog
 * The about page
-:properties:
-:export_file_name: about
-:export_description:  This is the page where I'm supposed to write something about myself.
-:export_hugo_section: /
-:export_date: <2022-08-14 søn>
-:export_lastmod: <2022-08-14 søn>
-:export_author: Rolf Håvard Blindheim
-:end:
+:PROPERTIES:
+:EXPORT_FILE_NAME: about
+:EXPORT_DESCRIPTION:  This is the page where I'm supposed to write something about myself.
+:EXPORT_HUGO_SECTION: /
+:EXPORT_DATE: <2022-08-14 søn>
+:EXPORT_LASTMOD: <2022-08-14 søn>
+:EXPORT_AUTHOR: Rolf Håvard Blindheim
+:END:
 
 The only real reason I made this blog was to have some place to put my [[https://rhblind.github.io/posts/emacs-configuration/][Emacs config]]...
 
+* Emacs MCP Server :@programming:emacs:
+:PROPERTIES:
+:EXPORT_FILE_NAME: Emacs MCP Server
+:EXPORT_DESCRIPTION: Emacs MCP Server is a package that implements a pure Elisp Model Context Protocol (MCP) server that lets your LLM of choice interact directly with your Emacs instance.
+:EXPORT_DATE: 2025-12-11 tor
+:EXPORT_LASTMOD: 2025-12-11 tor
+:EXPORT_AUTHOR: Rolf Håvard Blindheim
+:END:
+
+When I first got my hands at a Claude Code subscription I was curious about what it could do and how it worked. I needed a project to practice on, so I decided to
+see if I could get it to interact with Emacs. After a whole evening prompting and exploring Claude I managed to get a basic implementation working, and thus
+[[https://github.com/rhblind/emacs-mcp-server][Emacs MCP Server]] was born.
+
+I was quite satisfied with the result before I realized that there already existed packages that let's LLMs interact with Emacs.
+Neverthless, I learned a whole lot about how to work with an LLM, the MCP server protocol and how to implement a server in Elisp.
+
+As it turns out over the last months while I have been using it on my own, I have found several use-cases where having an LLM interact directly with Emacs is quite useful.
+So I have continued to improve the package, and I now feel that it is in a state where it can be useful to others as well.
+
+- *Help me tune my Emacs config* - I often have small issues that's a bit annoying, but I don't really want to dig down to fix it. Now I can just ask Claude to fix it for me.
+   It will look at my config, read the source code of packages I use and suggest fixes or improvements. It can evaluate the code directly in my Emacs instance,
+   so I can see the results immediately.
+- *Claude Code IDE* - The [[https://github.com/manzaltu/claude-code-ide.el][claude-code-ide.el]] package is brilliant, and has its own integration with Emacs, but I often find that claude suggests tool calls via the Emacs MCP Server
+   instead of using its own built-in capabilities. This gives me a more seamless experience when working with Claude in Emacs with the best from both worlds.
+
+If you want to try it out, you can find on [[https://github.com/rhblind/emacs-mcp-server][GitHub]] for now.
+
 * A shameless plug :@programming:elixir:
-:properties:
-:export_file_name: A shameless plug
-:export_description: Lately I have been trying to do some technical writing over at the {engineering@intility} blog...
-:export_date: <2022-08-14 søn>
-:export_lastmod: <2022-08-14 søn>
-:export_author: Rolf Håvard Blindheim
-:end:
+:PROPERTIES:
+:EXPORT_FILE_NAME: A shameless plug
+:EXPORT_DESCRIPTION: Lately I have been trying to do some technical writing over at the {engineering@intility} blog...
+:EXPORT_DATE: <2022-08-14 søn>
+:EXPORT_LASTMOD: <2022-08-14 søn>
+:EXPORT_AUTHOR: Rolf Håvard Blindheim
+:END:
 
 and instead of repeating myself here, I'll just link to the articles I've written.
 ** TLDR;

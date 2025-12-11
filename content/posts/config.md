@@ -1,7 +1,7 @@
 +++
 title = "Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-12-10T21:21:48+01:00
+lastmod = 2025-12-11T00:30:47+01:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
@@ -2617,28 +2617,32 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
         ))
 
     (defun cust/smart-tab ()
-    "Smart TAB for Evil insert mode.
+      "Smart TAB for Evil insert mode.
     Prioritizes completions over indentation:
     - If Corfu popup is visible → complete the selection
     - If Copilot suggestion is showing → accept it
+    - In Org mode → use org-cycle (handles structure templates, etc.)
     - Otherwise → indent the current line"
-    (interactive)
-    (cond
-    ;; Corfu popup frame is actually visible
-    ((and (bound-and-true-p corfu-mode)
-            (boundp 'corfu--frame)
-            corfu--frame
-            (frame-visible-p corfu--frame))
+      (interactive)
+      (cond
+       ;; Corfu popup frame is actually visible
+       ((and (bound-and-true-p corfu-mode)
+             (boundp 'corfu--frame)
+             corfu--frame
+             (frame-visible-p corfu--frame))
         (corfu-complete))
-    ;; Copilot overlay is actually visible in current buffer
-    ((and (bound-and-true-p copilot-mode)
-            (boundp 'copilot--overlay)
-            copilot--overlay
-            (overlayp copilot--overlay)
-            (overlay-buffer copilot--overlay))
+       ;; Copilot overlay is actually visible in current buffer
+       ((and (bound-and-true-p copilot-mode)
+             (boundp 'copilot--overlay)
+             copilot--overlay
+             (overlayp copilot--overlay)
+             (overlay-buffer copilot--overlay))
         (copilot-accept-completion))
-    ;; Default: insert one indent level
-    (t
+       ;; Org mode: use org-cycle which handles structure templates (<s, <q, etc.)
+       ((derived-mode-p 'org-mode)
+        (org-cycle))
+       ;; Default: insert one indent level
+       (t
         (cust/smart-tab-indent))))
 
     (defun cust/smart-tab-indent ()
@@ -4735,21 +4739,28 @@ Make headers prettier.
 #### Preview {#preview}
 
 Preview markdown files in a Xwidget window with `<localleader>-p`.
+Also install `marked` in order to support more than basic markdown functionality.
+
+```shell
+$ npm install -g marked
+```
 
 ```emacs-lisp
-(package! markdown-xwidget
-  :recipe (:host github
-           :repo "cfclrk/markdown-xwidget"
-           :files (:defaults "resources")))
+(package! markdown-xwidget :pin "223e699"
+  :recipe (:host github :repo "rhblind/markdown-xwidget" :files (:defaults "resources")))
 ```
 
 ```emacs-lisp
 (use-package! markdown-xwidget
   :after markdown-mode
+
   :init
   (map! :map markdown-mode-map
         :localleader
-        "p" #'markdown-xwidget-preview-mode))
+        "p" #'markdown-xwidget-preview-mode)
+  :config
+  (setq markdown-xwidget-mermaid-theme "default"
+        markdown-xwidget-code-block-theme "github"))
 ```
 
 
