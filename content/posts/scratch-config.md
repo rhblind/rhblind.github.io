@@ -1,7 +1,7 @@
 +++
 title = "Scratch Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2026-05-20T01:20:21+02:00
+lastmod = 2026-05-20T01:24:15+02:00
 tags = ["org-mode"]
 categories = ["emacs", "scratch"]
 draft = false
@@ -27,7 +27,7 @@ habits (good and bad) I've accumulated over the years. Since I've become very ac
 to the great user experience provided by Doom Emacs, I decided to write my new config as a
 personal Doom inspired micro-framework called [Scratch Emacs](https://github.com/rhblind/scratch-emacs).
 
-This file is my personal `~/scratch.d/config.org` file. It contains additional config to what's included in Scratch,
+This file is my personal `~/.scratch.d/config.org` file. It contains additional config to what's included in Scratch,
 as well as notes, TODOs, FIXMEs and other useful information I like to keep close to my Emacs config.
 
 
