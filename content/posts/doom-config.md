@@ -1,12 +1,12 @@
 +++
-title = "Emacs Configuration"
+title = "Doom Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2025-12-11T22:55:49+01:00
+lastmod = 2026-05-20T01:10:31+02:00
 tags = ["org-mode"]
 categories = ["emacs"]
 draft = false
 toc = true
-aliases = "/posts/emacs-configuration"
+aliases = "/posts/doom-emacs-configuration"
 +++
 
 <a href="https://github.com/rhblind/.doom.d" target="_blank" rel="noopener" title="Github" style="display: inline-flex; gap: 0.5em;">
@@ -327,6 +327,21 @@ When creating a new window, try to use the same window if possible or create a n
 Some of the default Doom workspace navigation keybindings seems a bit counter intuitive for
 my workflow, so I rebind some of them.
 
+When connecting via `emacsclient`, resume the last active workspace instead of creating a new empty one.
+Doom's default `persp-emacsclient-init-frame-behaviour-override` runs `+workspaces-associate-frame-fn` which
+creates a fresh workspace per connection. Setting it to `t` instead uses `set-default-persp` which, combined
+with `persp-set-last-persp-for-new-frames`, resumes the last active workspace.
+
+Important: `persp-init-frame-behaviour` must stay `t` (Doom's default). It is checked inside `persp-activate`
+on every workspace switch - setting it to `nil` prevents `persp-restore-window-conf` from running, so the
+last buffer is never shown when switching workspaces.
+
+```emacs-lisp
+(after! persp-mode
+  (setq persp-emacsclient-init-frame-behaviour-override t
+        persp-init-frame-behaviour t))
+```
+
 ```emacs-lisp
 (map! :leader
       (:when (modulep! :ui workspaces)
@@ -430,7 +445,7 @@ Map the newly defined function to `SPC-b [1..9]` for easy access.
 
 #### Buffer manipulation {#buffer-manipulation}
 
-Erase content of current buffer with `SPC-b e`
+Erase content of current buffer with `SPC-b e`.
 
 ```emacs-lisp
 (map! :leader
@@ -438,18 +453,21 @@ Erase content of current buffer with `SPC-b e`
        :desc "Erase buffer" "e" #'erase-buffer))
 ```
 
-Copy the entire buffer to kill-ring with `SPC-b Y`
+Copy the file path of the current buffer to clipboard with `SPC-b Y`.
 
 ```emacs-lisp
-(defun copy-buffer-to-clipboard ()
-  "Copy entire buffer to clipboard.
-This function is from stackoverflow.com (https://stackoverflow.com/a/10216310)"
+(defun copy-buffer-filepath-to-clipboard ()
+  "Copy the filepath of the current buffer to the clipboard."
   (interactive)
-  (clipboard-kill-ring-save (point-min) (point-max)))
+  (if-let ((filepath (buffer-file-name)))
+      (progn
+        (kill-new filepath)
+        (message "Copied: %s" filepath))
+    (message "Buffer is not visiting a file")))
 
 (map! :leader
       (:prefix-map ("b" . "buffer")
-       :desc "Copy buffer" "Y" #'copy-buffer-to-clipboard))
+       :desc "Copy filepath with line" "Y" #'copy-buffer-filepath-point-to-clipboard))
 ```
 
 Replace buffer with content from clipboard with `SPC-b P`.
@@ -522,11 +540,12 @@ When in `evil-mode`, use `C-n` and `C-p` to move to next or previous functions, 
 ```emacs-lisp
 (defun cust/prog-mode-defun-navigation ()
   "Use Doom's defun navigation for C-n/C-p, and C-S-n for visual end-of-defun."
-  (evil-define-key '(normal visual) (current-local-map)
-    (kbd "C-n") #'+evil/next-beginning-of-method
-    (kbd "C-p") #'+evil/previous-beginning-of-method
-    (kbd "C-S-n") #'cust/visual-next-end-of-method
-    (kbd "C-S-p") #'cust/visual-previous-beginning-of-method))
+  (when (derived-mode-p 'prog-mode 'text-mode)
+    (evil-define-key '(normal visual) (current-local-map)
+      (kbd "C-n") #'+evil/next-beginning-of-method
+      (kbd "C-p") #'+evil/previous-beginning-of-method
+      (kbd "C-S-n") #'cust/visual-next-end-of-method
+      (kbd "C-S-p") #'cust/visual-previous-beginning-of-method)))
 
 (add-hook 'evil-local-mode-hook #'cust/prog-mode-defun-navigation)
 ```
@@ -845,7 +864,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
      +all +defaults)    ; tame sudden yet inevitable temporary windows
     ;;smooth-scroll     ; smooth scrolling
     ;;tabs              ; a tab bar for Emacs
-    treemacs            ; a project drawer, like neotree but cooler
+    (treemacs +lsp)     ; a project drawer, like neotree but cooler
     ;;unicode           ; extended unicode support for various languages
     (vc-gutter +pretty) ; vcs diff in the fringe
     vi-tilde-fringe     ; fringe tildes to mark beyond EOB
@@ -902,8 +921,7 @@ To generate the Emacs environment file, simply run `doom env` from the terminal.
     ```emacs-lisp
     ;;ansible
     ;;biblio            ; Writes a PhD for you (citation needed)
-    (debugger
-     +lsp)              ; FIXME stepping through code, to help you add bugs
+    debugger
     direnv
     docker
     editorconfig        ; let someone else argue about tabs vs spaces
@@ -1103,7 +1121,75 @@ $ defaults write org.gnu.Emacs TransparentTitleBar LIGHT  # or DARK; doesn't rea
 ```
 
 
+#### Terminal settings {#terminal-settings}
+
+Disable the menu bar when running in terminal mode. The `default-frame-alist` setting of `menu-bar-lines . 0`
+only applies to GUI frames, so we need an explicit hook for terminal frames.
+
+```emacs-lisp
+(add-hook 'after-make-frame-functions
+          (lambda (frame)
+            (unless (display-graphic-p frame)
+              (menu-bar-mode -1))))
+(unless (display-graphic-p)
+  (menu-bar-mode -1))
+```
+
+
+#### Terminal ligatures {#terminal-ligatures}
+
+In terminal frames, `ligature.el` (used by Doom's `(ligatures +extra)` module) has no effect because it relies on HarfBuzz font shaping, which only runs in GUI frames. As a fallback, `prettify-symbols-mode` substitutes common programming sequences with standard Unicode characters, which any terminal font can render.
+
+```emacs-lisp
+(defvar +my/terminal-ligatures
+  '(;; Arrows
+    ("->"  . ?→)
+    ("->>" . ?↠)
+    ("=>"  . ?⇒)
+    ("=>>" . ?⇉)
+    ("<-"  . ?←)
+    ("<->" . ?↔)
+    ("<=>" . ?⟺)
+    ;; Pipe
+    ("|>"  . ?▷)
+    ("<|"  . ?◁)
+    ;; Comparison
+    ("!="  . ?≠)
+    ("!==" . ?≢)
+    ("=="  . ?≡)
+    ("===" . ?≣)
+    (">="  . ?≥)
+    ;; Logic / math
+    ("&&"  . ?∧)
+    ("||"  . ?∨)
+    ("::"  . ?∷)
+    ("..." . ?…)
+    (".."  . ?‥)
+    ;; Functional
+    ("lambda" . ?λ))
+  "Prettify-symbols substitutions using standard Unicode for terminal frames.")
+
+;; Only apply prettify-symbols-mode ligatures in terminal frames.
+;; In GUI frames, ligature.el handles this via HarfBuzz font shaping.
+(add-hook 'after-make-frame-functions
+          (lambda (frame)
+            (unless (display-graphic-p frame)
+              (with-selected-frame frame
+                (setq-default prettify-symbols-alist
+                              (append +my/terminal-ligatures (default-value 'prettify-symbols-alist)))))))
+
+;; Apply for initial frame if it's a terminal
+(unless (display-graphic-p)
+  (setq-default prettify-symbols-alist
+                (append +my/terminal-ligatures (default-value 'prettify-symbols-alist))))
+```
+
+
 #### Theme and modeline {#theme-and-modeline}
+
+```emacs-lisp
+(package! ef-themes)
+```
 
 I currently use two themes - a light theme for usual work, and a dark theme for late night hacking sessions.
 These days I'm using the `doom-tomorrow-day` light theme, and `doom-nord-aurora` dark theme. To easily cycle
@@ -1111,10 +1197,11 @@ between them, I keep my favorite themes in a  `doom-cycle-themes` list, and have
 the next theme in the list.
 
 ```emacs-lisp
-(setq dark-mode-theme 'doom-nord-aurora
+(setq dark-mode-theme 'doom-nord
       light-mode-theme 'doom-tomorrow-day)
 
-(setq doom-cycle-themes (list light-mode-theme dark-mode-theme))
+
+(setq doom-cycle-themes (list dark-mode-theme light-mode-theme))
 ```
 
 We'll use the first theme in the list as our default theme.
@@ -1747,6 +1834,33 @@ Here are just a collection of utility functions I use.
 
 <!--list-separator-->
 
+-  copy-buffer-filepath-point-to-clipboard
+
+    This is a small function to copy the current buffer and point location to the clipboard.
+    Supports visual selection ranges in the format: filepath:line or filepath:startLine-endLine
+
+    ```emacs-lisp
+    (defun copy-buffer-filepath-point-to-clipboard ()
+      "Copy the current buffer's filepath with line or line range to clipboard.
+    Format: filepath:line or filepath:startLine-endLine (if region is active)"
+      (interactive)
+      (if-let ((filepath (buffer-file-name)))
+          (let* ((start-line (line-number-at-pos (if (region-active-p)
+                                                      (region-beginning)
+                                                    (point))))
+                 (end-line (line-number-at-pos (if (region-active-p)
+                                                    (region-end)
+                                                  (point))))
+                 (filepath-with-point (if (= start-line end-line)
+                                          (format "%s:%d" filepath start-line)
+                                        (format "%s:%d-%d" filepath start-line end-line))))
+            (kill-new filepath-with-point)
+            (message "Copied: %s" filepath-with-point))
+        (message "Buffer is not visiting a file")))
+    ```
+
+<!--list-separator-->
+
 -  reload-buffer
 
     By default, `auto-revert-mode` will not reload a file if you have unsaved changes in the buffer. To override this (for example discard unsaved changes
@@ -1894,6 +2008,37 @@ we could do it by specifying the receipe like this.
 ```
 
 
+#### Packages from local repositories {#packages-from-local-repositories}
+
+If we have local packages in the `.elisp/packages/` folder in our `doom-private-dir`, we can install them like this:
+
+```emacs-lisp
+;; To install a local package, use the :local-repo property.
+;; The path is relative to doom-private-dir (i.e., ~/.doom.d/)
+;;
+;; Example for a package in elisp/packages/my-package/:
+;; (package! my-package :recipe (:local-repo "elisp/packages/my-package"))
+;;
+;; For packages with multiple files or specific file patterns:
+;; (package! my-package :recipe (:local-repo "elisp/packages/my-package" :files ("*.el")))
+;;
+;; For packages that also have build steps or additional files:
+;; (package! my-package :recipe (:local-repo "elisp/packages/my-package" :files ("*.el" "resources/*")))
+```
+
+As an example, if you have a package called `my-cool-package` with its files in
+`~/.doom.d/elisp/packages/my-cool-package/my-cool-package.el`, you would declare it as:
+
+```emacs-lisp
+(package! my-cool-package :recipe (:local-repo "elisp/packages/my-cool-package"))
+```
+
+After adding a new local package:
+
+1.  Run `doom sync` to install and build the package
+2.  Restart Emacs or run `doom/reload`
+
+
 #### Disable or override built-in packages {#disable-or-override-built-in-packages}
 
 In order to disable a built-in package (for whatever reason), we can use the `:disable` property.
@@ -1924,7 +2069,7 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 -  Claude Code
 
     ```emacs-lisp
-    (package! claude-code-ide :pin "32d853e"
+    (package! claude-code-ide :pin "56db02e"
       :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
     ```
 
@@ -1937,9 +2082,12 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
             :desc "+Claude Code" "C" #'claude-code-ide-menu)
       :config
       (claude-code-ide-emacs-tools-setup)
-      (setq claude-code-ide-terminal-backend 'vterm
+      (setq claude-code-ide-terminal-backend  'vterm
             claude-code-ide-vterm-render-delay 0.001
-            claude-code-ide-enable-mcp-server t))
+            claude-code-ide-enable-mcp-server  t
+            claude-code-ide-no-flicker         t
+            claude-code-ide-vterm-anti-flicker t
+            claude-code-ide-enable-mcp-server  nil))
     ```
 
 <!--list-separator-->
@@ -2092,12 +2240,12 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
 -  MCP Server
 
-    Pure Elisp implementation of an MCP server.
+    Pure Elisp implementation of an MCP server for Emacs.
 
     ```emacs-lisp
-    (package! mcp-server :pin "f1c6dec"
+    (package! mcp-server :pin "1947617"
       :recipe (:host github :repo "rhblind/emacs-mcp-server"
-               :files ("*.el" "mcp-wrapper.py" "mcp-wrapper.sh")))
+               :files ("*.el" "tools/*.el" "mcp-wrapper.py" "mcp-wrapper.sh")))
     ```
 
     ```emacs-lisp
@@ -2109,21 +2257,23 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
     Comment this section out when not developing.
 
     ```emacs-lisp
-    ;; (package! mcp-server :disable t)
+    (package! mcp-server :disable t)
     ```
 
     ```emacs-lisp
-    ;; (add-to-list 'load-path "~/workspace/emacs-mcp-server")
-    ;; (require 'mcp-server)
+    (add-to-list 'load-path "~/workspace/emacs-mcp-server/.worktrees/org-tools")
+    (require 'mcp-server)
     ```
 
     To hook up Claude Code to the MCP server, I use this command.
 
     ```shell
-    $ claude mcp add emacs --scope user \
-        ~/.config/emacs/.local/straight/build-30.1/mcp-server/mcp-wrapper.py \
-        ~/.config/emacs/.local/cache/emacs-mcp-server.sock
+    $ claude mcp add emacs -- socat - UNIX-CONNECT:$HOME/.config/emacs/.local/cache/emacs-mcp-server.sock
     ```
+
+    Things to fix:
+
+    -   When asking for permission to do something (tool usage), it should use the agents UI instead of asking in the Emacs minibuffer.
 
 <!--list-separator-->
 
@@ -2231,8 +2381,1247 @@ inherit the rest from Doom or MELPA/ELPA/emacsmirror.
 
       ;; Customize the commit prompt to prevent markdown formatting
       (setq gptel-magit-commit-prompt
-            (concat gptel-magit-prompt-conventional-commits
-                    "\n\nIMPORTANT: Return ONLY the raw commit message text. Do NOT wrap the output in markdown code blocks, backticks, or any other formatting. No ``` before or after.")))
+            (string-join
+             (list gptel-magit-prompt-conventional-commits
+                   ""
+                   "IMPORTANT:"
+                   "- Commit message MUST follow Conventional Commits specification, with release-please compatible conventions for releases."
+                   "- Return ONLY the raw commit message text"
+                   "- The summary should never exceed 80 characters, unless absolutely necessary for clarity"
+                   "- If including a body, ALWAYS separate it from the summary with a blank line"
+                   "- Do NOT wrap the output in markdown code blocks, backticks, or any other formatting"
+                   "- NEVER add triple backticks (```) before or after the commit message!")
+             "\n")))
+    ```
+
+<!--list-separator-->
+
+-  Agent Shell
+
+    Agent Shell provides a native Emacs user interface for interacting with AI agents over Agent Client Protocol (ACP).
+
+    ```emacs-lisp
+    (package! shell-maker :recipe (:host github :repo "xenodium/shell-maker")
+      :pin "6eafe72")
+    (package! acp)
+    (package! agent-shell)
+    ```
+
+    ```emacs-lisp
+    (require 'acp)
+    (require 'agent-shell)
+    ```
+
+    <!--list-separator-->
+
+    -  Claude Code integration
+
+        For Claude Code integration we need to install an ACP adapter. The Zed adapter works well:
+
+        ```shell
+        npm install -g @zed-industries/claude-code-acp
+        ```
+
+        ```emacs-lisp
+        (setq agent-shell-anthropic-authentication (agent-shell-anthropic-make-authentication :login t)
+              agent-shell-preferred-agent-config (agent-shell-anthropic-make-claude-code-config)
+              agent-shell-file-completion-enabled t)
+        ```
+
+    <!--list-separator-->
+
+    -  Keybindings
+
+        Custom keybindings for `agent-shell` buffers. We override some default behaviors
+        to better integrate with Evil mode and general Emacs workflows.
+
+        ```emacs-lisp
+        ;; Multi-line input: M-<return> inserts a newline instead of submitting
+        (map! :map shell-maker-mode-map
+              :i "M-<return>" #'newline
+              :n "M-<return>" #'newline)
+
+        (map! :map agent-shell-mode-map
+              ;; C-<tab> cycles session mode (plan/code/etc) - overrides aya-expand
+              :i "C-<tab>" #'agent-shell-cycle-session-mode
+              :n "C-<tab>" #'agent-shell-cycle-session-mode
+              ;; C-g interrupts without confirmation prompt
+              :i "C-g" (cmd! (agent-shell-interrupt t))
+              :n "C-g" (cmd! (agent-shell-interrupt t))
+              ;; Disable arrow keys for history (use M-p/M-n instead)
+              :i "<up>" nil
+              :i "<down>" nil
+              ;; TAB activates/toggles expandable items (like RET does)
+              :n "TAB" #'cust/agent-shell--activate-item-at-point
+              :n "<tab>" #'cust/agent-shell--activate-item-at-point
+              ;; C-c C-v pastes image from clipboard (requires pngpaste)
+              :i "C-c C-v" #'cust/agent-shell--send-clipboard-image
+              :n "C-c C-v" #'cust/agent-shell--send-clipboard-image
+              ;; C-n/C-p navigates between items in normal mode
+              :n "C-n" #'agent-shell-next-item
+              :n "C-p" #'agent-shell-previous-item)
+        ```
+
+    <!--list-separator-->
+
+    -  Custom commands
+
+        Helper functions for features not provided by `agent-shell` out of the box.
+
+        <!--list-separator-->
+
+        -  TAB to activate items
+
+            `agent-shell` makes certain items (expandable sections, buttons) interactive via
+            text properties. This function finds and invokes the RET binding at point,
+            allowing TAB to toggle/expand items just like pressing RET.
+
+            ```emacs-lisp
+            (defun cust/agent-shell--activate-item-at-point ()
+              "Activate the item at point by invoking its RET binding."
+              (interactive)
+              (let ((fn nil)
+                    (pos (point)))
+                ;; Check point and a few chars ahead (for icons like ▶/▼)
+                (while (and (not fn) (<= pos (+ (point) 3)))
+                  (when-let ((km (get-text-property pos 'keymap)))
+                    (setq fn (lookup-key km (kbd "RET"))))
+                  (setq pos (1+ pos)))
+                (when fn (funcall fn))))
+            ```
+
+        <!--list-separator-->
+
+        -  Paste image from clipboard
+
+            Insert an image from the system clipboard into the prompt. The image is saved
+            to `.agent-shell/screenshots/` in the project root, and the file path is
+            inserted at point. Requires `pngpaste` (install via `brew install pngpaste`).
+
+            ```emacs-lisp
+            (defun cust/agent-shell--send-clipboard-image ()
+              "Paste image from clipboard and insert it into `agent-shell'."
+              (interactive)
+              (let* ((project-root (or (projectile-project-root) default-directory))
+                     (screenshots-dir (expand-file-name ".agent-shell/screenshots" project-root))
+                     (timestamp (format-time-string "%Y%m%d_%H%M%S"))
+                     (filename (expand-file-name (format "clipboard_%s.png" timestamp) screenshots-dir)))
+                (make-directory screenshots-dir t)
+                (if (zerop (call-process "pngpaste" nil nil nil filename))
+                    (progn
+                      (goto-char (point-max))
+                      (insert filename)
+                      (message "Inserted clipboard image: %s" filename))
+                  (user-error "No image in clipboard (or pngpaste not installed)"))))
+            ```
+
+    <!--list-separator-->
+
+    -  Navigation behavior fix
+
+        I use `C-n=/=C-p` in Evil normal mode to navigate between items. This advice
+        ensures navigation always works, even when the cursor is at the prompt.
+
+        ```emacs-lisp
+        (defun cust/agent-shell--force-navigate-in-normal-state (orig-fn &rest args)
+          "Advice to skip self-insert behavior in evil normal state."
+          (if (and (bound-and-true-p evil-local-mode)
+                   (eq evil-state 'normal))
+              (cl-letf (((symbol-function 'shell-maker-point-at-last-prompt-p) #'ignore))
+                (apply orig-fn args))
+            (apply orig-fn args)))
+
+        (advice-add 'agent-shell-next-item :around #'cust/agent-shell--force-navigate-in-normal-state)
+        (advice-add 'agent-shell-previous-item :around #'cust/agent-shell--force-navigate-in-normal-state)
+        ```
+
+    <!--list-separator-->
+
+    -  Keyword trigger highlighting
+
+        Claude Code supports different "thinking" levels that allocate more tokens for
+        complex reasoning. These keywords are highlighted with rainbow colors to make
+        them visually distinct when typing prompts.
+
+        -   **ultrathink** (~32k tokens): "ultrathink", "think harder", "think intensely", etc.
+        -   **megathink** (~10k tokens): "megathink", "think deeply", "think hard", etc.
+        -   **think** (~4k tokens): "think"
+
+        <!--listend-->
+
+        ```emacs-lisp
+        (defface agent-shell-ultrathink-face
+          '((t :foreground "#ff79c6" :weight bold :inherit rainbow-delimiters-depth-1-face))
+          "Face for ultrathink-level trigger words.")
+
+        (defface agent-shell-megathink-face
+          '((t :foreground "#8be9fd" :weight bold :inherit rainbow-delimiters-depth-2-face))
+          "Face for megathink-level trigger words.")
+
+        (defface agent-shell-think-face
+          '((t :foreground "#50fa7b" :weight bold :inherit rainbow-delimiters-depth-3-face))
+          "Face for think-level trigger words.")
+
+        (defvar agent-shell-thinking-keywords
+          `((,(regexp-opt '("ultrathink" "think harder" "think intensely" "think longer"
+                            "think really hard" "think super hard" "think very hard")
+                          'words)
+             . 'agent-shell-ultrathink-face)
+            (,(regexp-opt '("megathink" "think about it" "think a lot" "think deeply"
+                            "think hard" "think more")
+                          'words)
+             . 'agent-shell-megathink-face)
+            (,(concat "\\<think\\>")
+             . 'agent-shell-think-face))
+          "Font-lock keywords for Claude Code thinking triggers.")
+
+        (add-hook 'agent-shell-mode-hook
+                  (lambda ()
+                    (when (eq 'claude-code (map-elt (map-elt agent-shell--state :agent-config) :identifier))
+                      (font-lock-add-keywords nil agent-shell-thinking-keywords))))
+        ```
+
+    <!--list-separator-->
+
+    -  Slash command and file completion fixes
+
+        Improvements to `@` file references and `/` slash command completion:
+
+        -   `/` commands only trigger at the start of the prompt (they're commands, not mid-sentence)
+        -   `@` file references can appear anywhere (for referencing files mid-sentence)
+        -   Pre-populate common slash commands so they work before the agent handshake completes
+
+        <!--listend-->
+
+        ```emacs-lisp
+        ;; Pre-populate core Claude Code slash commands for immediate completion
+        (defvar cust/agent-shell--default-commands-claude
+          '[((name . "compact") (description . "Clear conversation history but keep a summary in context"))
+            ((name . "init") (description . "Initialize a new CLAUDE.md file with codebase documentation"))
+            ((name . "resume") (description . "Resume a previous conversation"))
+            ((name . "review") (description . "Review a pull request"))
+            ((name . "pr-comments") (description . "Get comments from a GitHub pull request"))
+            ((name . "security-review") (description . "Complete a security review of pending changes"))]
+          "Core Claude Code slash commands for immediate completion.")
+
+        (defun cust/agent-shell--prepopulate-commands-advice (result)
+          "Pre-populate slash commands for Claude Code sessions."
+          (when (and (eq 'claude-code (map-elt (map-elt result :agent-config) :identifier))
+                     (null (map-elt result :available-commands)))
+            (map-put! result :available-commands cust/agent-shell--default-commands-claude))
+          result)
+
+        (advice-add 'agent-shell--make-state :filter-return #'cust/agent-shell--prepopulate-commands-advice)
+
+        (defun cust/agent-shell--at-input-start-p (trigger-pos)
+          "Return non-nil if TRIGGER-POS is at the start of user input."
+          (let ((input-start (comint-line-beginning-position)))
+            (save-excursion
+              (goto-char trigger-pos)
+              (skip-chars-backward " \t")
+              (<= (point) input-start))))
+
+        (defun cust/agent-shell--file-completion-at-point-advice (orig-fn)
+          "Allow @ file completion anywhere in the prompt."
+          (when-let* ((at-pos (save-excursion
+                                (skip-chars-backward "[:alnum:]/_.-")
+                                (when (eq (char-before) ?@)
+                                  (1- (point)))))
+                      (start (1+ at-pos))
+                      (end (point))
+                      (files (agent-shell--project-files)))
+            (list start end files
+                  :exclusive 'no
+                  :exit-function (lambda (_string _status) (insert " ")))))
+
+        (defun cust/agent-shell--command-completion-at-point-advice (orig-fn)
+          "Only complete / commands at prompt start."
+          (when-let* ((slash-pos (save-excursion
+                                   (skip-chars-backward "[:alnum:]_-")
+                                   (when (eq (char-before) ?/)
+                                     (1- (point)))))
+                      (at-start (cust/agent-shell--at-input-start-p slash-pos))
+                      (start (1+ slash-pos))
+                      (end (point))
+                      (cmds (map-elt agent-shell--state :available-commands))
+                      (cmd-names (mapcar (lambda (cmd) (map-elt cmd 'name)) cmds)))
+            (list start end cmd-names
+                  :exclusive t
+                  :exit-function (lambda (_string _status) (insert " ")))))
+
+        (advice-add 'agent-shell--file-completion-at-point :around
+                    #'cust/agent-shell--file-completion-at-point-advice)
+        (advice-add 'agent-shell--command-completion-at-point :around
+                    #'cust/agent-shell--command-completion-at-point-advice)
+        ```
+
+    <!--list-separator-->
+
+    -  Resume previous conversations
+
+        The `/resume` slash command allows resuming previous Claude Code conversations.
+        Conversations are stored in `~/.claude/projects/<encoded-project-path>/` as JSONL
+        files. Each file contains summary entries with conversation titles.
+
+        This implementation provides:
+
+        -   Resume conversations from the current project (default)
+        -   Resume conversations from all projects (press `A` in the selection buffer)
+        -   Show conversation summaries with timestamps for easy identification
+
+        <!--listend-->
+
+        ```emacs-lisp
+        (defvar cust/agent-shell-claude-projects-dir
+          (expand-file-name "projects" (expand-file-name ".claude" "~"))
+          "Directory where Claude Code stores conversation files.")
+
+        (defun cust/agent-shell--encode-project-path (path)
+          "Encode PATH to Claude's project directory format.
+        Claude encodes paths by replacing both / and . with -.
+        Trailing slashes are removed first to match Claude Code's behavior."
+          (let ((clean-path (directory-file-name path)))  ; Remove trailing slash
+            (replace-regexp-in-string "[/.]" "-" clean-path)))
+
+        (defun cust/agent-shell--get-project-dir-for-path (path)
+          "Find the Claude project directory that matches PATH.
+        Returns the directory name or nil if not found."
+          (let ((encoded (cust/agent-shell--encode-project-path path))
+                (dirs (directory-files cust/agent-shell-claude-projects-dir nil "^-")))
+            ;; Try exact match first
+            (or (cl-find encoded dirs :test #'string=)
+                ;; Fallback: find a dir that could match (handle trailing slash variations)
+                (cl-find-if (lambda (dir)
+                              (or (string= dir encoded)
+                                  (string= dir (concat encoded "-"))
+                                  (string-prefix-p (concat encoded "-") dir)))
+                            dirs))))
+
+        (defun cust/agent-shell--extract-project-name (dir-name)
+          "Extract a human-readable project name from DIR-NAME.
+        Attempts to show a meaningful directory name by looking for patterns
+        like 'workspace-X' or dotfiles like '--dirname'."
+          (cond
+           ;; Pattern: -Users-xxx-workspace-projectname -> projectname
+           ((string-match "-workspace-\\(.+\\)$" dir-name)
+            (match-string 1 dir-name))
+           ;; Pattern: -Users-xxx--dotdir (dotfiles like .doom.d) -> .dotdir
+           ((string-match "--\\([^-]+\\)\\(-[^-]+\\)?$" dir-name)
+            (concat "." (match-string 1 dir-name)
+                    (when (match-string 2 dir-name)
+                      (match-string 2 dir-name))))
+           ;; Fallback: use last segment
+           ((string-match "-\\([^-]+\\)$" dir-name)
+            (match-string 1 dir-name))
+           (t dir-name)))
+
+        (defun cust/agent-shell--parse-conversation-file (file)
+          "Parse a conversation JSONL FILE and return conversation metadata.
+        Returns a plist with :id, :summary, :timestamp, :message-count, :first-message, :git-branch, :cwd, and :file."
+          (let ((summaries nil)
+                (latest-timestamp nil)
+                (message-count 0)
+                (first-user-message nil)
+                (git-branch nil)
+                (cwd nil)
+                (session-id (file-name-sans-extension (file-name-nondirectory file))))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (goto-char (point-min))
+              (while (not (eobp))
+                (let* ((line (buffer-substring-no-properties
+                              (line-beginning-position) (line-end-position)))
+                       (json (ignore-errors (json-parse-string line :object-type 'alist))))
+                  (when json
+                    (let ((type (alist-get 'type json))
+                          (message (alist-get 'message json)))
+                      ;; Extract cwd from first entry that has it
+                      (unless cwd
+                        (when-let ((dir (alist-get 'cwd json)))
+                          (setq cwd dir)))
+                      ;; Extract git branch from first entry that has it
+                      (unless git-branch
+                        (when-let ((branch (alist-get 'gitBranch json)))
+                          (setq git-branch branch)))
+                      (cond
+                       ;; Collect summaries
+                       ((string= type "summary")
+                        (push (alist-get 'summary json) summaries))
+                       ;; Count and capture first user message (skip meta/system messages)
+                       ((and message
+                             (string= (alist-get 'role message) "user")
+                             (not (eq (alist-get 'isMeta json) t)))
+                        (cl-incf message-count)
+                        (unless first-user-message
+                          (let* ((content (alist-get 'content message))
+                                 (text (cond
+                                        ((stringp content) content)
+                                        ((vectorp content)
+                                         (cl-loop for item across content
+                                                  when (and (listp item)
+                                                            (string= (alist-get 'type item) "text"))
+                                                  return (alist-get 'text item)))
+                                        (t nil))))
+                            ;; Skip system-like messages
+                            (when (and text
+                                       (not (string-prefix-p "Unknown skill:" text))
+                                       (not (string-prefix-p "<local-command" text))
+                                       (not (string-match-p "^/[a-z]" text)))
+                              (setq first-user-message text)))))
+                       ;; Count assistant messages
+                       ((and message (string= (alist-get 'role message) "assistant"))
+                        (cl-incf message-count)))
+                      ;; Track latest timestamp
+                      (when-let ((ts (alist-get 'timestamp json)))
+                        (when (or (null latest-timestamp)
+                                  (string> ts latest-timestamp))
+                          (setq latest-timestamp ts))))))
+                (forward-line 1)))
+            ;; Return metadata even without summaries
+            (when (or summaries (> message-count 0))
+              (list :id session-id
+                    :summary (car (last summaries))
+                    :summaries (nreverse summaries)
+                    :timestamp latest-timestamp
+                    :message-count message-count
+                    :first-message first-user-message
+                    :git-branch git-branch
+                    :cwd cwd
+                    :file file))))
+
+        (defun cust/agent-shell--extract-conversation-messages (file)
+          "Extract user/assistant messages from conversation JSONL FILE.
+        Returns a list of message plists with :role and :content.
+        Messages are returned in chronological order, suitable for replay."
+          (let ((messages nil))
+            (with-temp-buffer
+              (insert-file-contents file)
+              (goto-char (point-min))
+              (while (not (eobp))
+                (let* ((line (buffer-substring-no-properties
+                              (line-beginning-position) (line-end-position)))
+                       (json (ignore-errors (json-parse-string line :object-type 'alist))))
+                  (when json
+                    (let ((type (alist-get 'type json))
+                          (message (alist-get 'message json))
+                          (is-meta (alist-get 'isMeta json))
+                          (is-sidechain (alist-get 'isSidechain json)))
+                      ;; Only process user/assistant messages, skip meta and sidechain
+                      ;; Note: JSON false becomes :false symbol (truthy!), true becomes t
+                      (when (and message
+                                 (not (eq is-meta t))
+                                 (not (eq is-sidechain t))
+                                 (member type '("user" "assistant")))
+                        (let* ((role (alist-get 'role message))
+                               (content (alist-get 'content message))
+                               ;; Extract text from content array
+                               (text (cond
+                                      ((stringp content) content)
+                                      ((vectorp content)
+                                       (mapconcat
+                                        (lambda (item)
+                                          (when (and (listp item)
+                                                     (string= (alist-get 'type item) "text"))
+                                            (alist-get 'text item)))
+                                        content ""))
+                                      (t nil))))
+                          ;; Skip empty messages and tool results
+                          (when (and text (not (string-empty-p text)))
+                            (push (list :role role :content text) messages)))))))
+                (forward-line 1)))
+            ;; Return in chronological order
+            (nreverse messages)))
+
+        (defun cust/agent-shell--format-history-for-context (messages &optional max-messages)
+          "Format MESSAGES list into a context string for Claude.
+        MAX-MESSAGES limits how many recent messages to include (default 20)."
+          (let* ((max-msgs (or max-messages 20))
+                 (recent-msgs (seq-take (reverse messages) max-msgs))
+                 (msgs-to-format (reverse recent-msgs)))
+            (mapconcat
+             (lambda (msg)
+               (let ((role (plist-get msg :role))
+                     (content (plist-get msg :content)))
+                 (format "[%s]: %s"
+                         (if (string= role "user") "User" "Assistant")
+                         ;; Truncate very long messages
+                         (if (> (length content) 500)
+                             (concat (substring content 0 497) "...")
+                           content))))
+             msgs-to-format
+             "\n\n")))
+
+        (defun cust/agent-shell--get-session-file (session-id)
+          "Get the JSONL file path for SESSION-ID in the current project."
+          (let* ((project-dir (cust/agent-shell--get-project-dir-for-path
+                               (directory-file-name (or (projectile-project-root)
+                                                        default-directory))))
+                 (session-file (when project-dir
+                                 (expand-file-name
+                                  (concat session-id ".jsonl")
+                                  (expand-file-name project-dir
+                                                    cust/agent-shell-claude-projects-dir)))))
+            (when (and session-file (file-exists-p session-file))
+              session-file)))
+
+        (defun cust/agent-shell--list-conversations (&optional project-path)
+          "List all conversations, optionally filtered to PROJECT-PATH.
+        Returns a list of conversation metadata plists sorted by timestamp (newest first)."
+          (let ((conversations nil)
+                (target-dir (when project-path
+                              (cust/agent-shell--get-project-dir-for-path
+                               (directory-file-name project-path))))
+                (all-dirs (directory-files cust/agent-shell-claude-projects-dir nil "^-")))
+            ;; Determine which directories to scan
+            (let ((dirs (if target-dir
+                            (list target-dir)
+                          all-dirs)))
+              (dolist (dir-name dirs)
+                (let ((dir (expand-file-name dir-name cust/agent-shell-claude-projects-dir)))
+                  (when (file-directory-p dir)
+                    (dolist (file (directory-files dir t "\\.jsonl$"))
+                      (when-let ((meta (cust/agent-shell--parse-conversation-file file)))
+                        ;; Add project info - use directory name for display
+                        (setq meta (plist-put meta :project-dir dir-name))
+                        (setq meta (plist-put meta :project-name
+                                              (cust/agent-shell--extract-project-name dir-name)))
+                        (push meta conversations)))))))
+            ;; Sort by timestamp, newest first
+            (sort conversations
+                  (lambda (a b)
+                    (let ((ts-a (or (plist-get a :timestamp) ""))
+                          (ts-b (or (plist-get b :timestamp) "")))
+                      (string> ts-a ts-b))))))
+
+        (defun cust/agent-shell--format-timestamp (iso-timestamp &optional include-date)
+          "Format ISO-TIMESTAMP to a human-readable string.
+        If INCLUDE-DATE is non-nil, include the date alongside relative time."
+          (if (null iso-timestamp)
+              "unknown"
+            (let* ((time (date-to-time (replace-regexp-in-string "T" " "
+                                         (replace-regexp-in-string "\\.[0-9]+Z$" "" iso-timestamp))))
+                   (diff (float-time (time-subtract (current-time) time)))
+                   (date-str (format-time-string "%Y-%m-%d %H:%M" time))
+                   (relative (cond
+                              ((< diff 60) "just now")
+                              ((< diff 3600) (format "%d min ago" (/ diff 60)))
+                              ((< diff 86400) (format "%d hours ago" (/ diff 3600)))
+                              ((< diff 604800) (format "%d days ago" (/ diff 86400)))
+                              (t nil))))
+              (if include-date
+                  (if relative
+                      (format "%s (%s)" date-str relative)
+                    date-str)
+                (or relative date-str)))))
+
+        (defun cust/agent-shell--resume-conversation (session-id &optional cwd session-file)
+          "Resume a Claude Code conversation with SESSION-ID.
+        CWD is the working directory for the session.
+        SESSION-FILE is the path to the conversation JSONL file."
+          ;; Start a new agent-shell with the resume session ID
+          (cust/agent-shell-with-resume session-id cwd session-file))
+
+        (defun cust/acp-make-session-resume-request (session-id cwd mcp-servers)
+          "Create an ACP session/resume request to resume an existing session.
+        SESSION-ID is the ID of the session to resume.
+        CWD is the working directory.
+        MCP-SERVERS is a list of MCP server configurations.
+
+        Note: session/resume is an unstable ACP method that continues a conversation
+        without replaying history. Claude Code advertises 'resume' capability, not 'load'."
+          (list (cons 'method "session/resume")
+                (cons 'params
+                      (list (cons 'sessionId session-id)
+                            (cons 'cwd cwd)
+                            (cons 'mcpServers (or mcp-servers []))))))
+
+
+
+        (defun cust/agent-shell--send-history-context (session-file buffer)
+          "Load conversation history from SESSION-FILE and send as context prompt.
+        BUFFER is the agent-shell buffer to send the prompt in."
+          (when (and session-file (file-exists-p session-file))
+            (let* ((messages (cust/agent-shell--extract-conversation-messages session-file))
+                   (history-text (when messages
+                                   (cust/agent-shell--format-history-for-context messages 30))))
+              (when (and history-text (not (string-empty-p history-text)))
+                ;; Send the history as a context-setting prompt
+                (let ((context-prompt (format "I'm resuming our previous conversation. Here's the context from our last session:
+
+        <previous-conversation>
+        %s
+        </previous-conversation>
+
+        Please acknowledge that you have this context and are ready to continue. You don't need to summarize it - just confirm you're ready." history-text))
+                      (target-buffer buffer))
+                  ;; Use run-at-time to let the UI settle first
+                  (run-at-time 0.5 nil
+                               (lambda ()
+                                 (when (buffer-live-p target-buffer)
+                                   (with-current-buffer target-buffer
+                                     (agent-shell--send-command
+                                      :prompt context-prompt
+                                      :shell (agent-shell--state)))))))))))
+
+        (defun cust/agent-shell--initiate-session-with-resume (shell on-session-init resume-session-id)
+          "Initiate ACP session resumption with SHELL, resuming RESUME-SESSION-ID.
+        Uses the ACP session/resume method to continue the conversation.
+        Must provide ON-SESSION-INIT (lambda ())."
+          (unless on-session-init
+            (error "Missing required argument: :on-session-init"))
+          (unless resume-session-id
+            (error "Missing required argument: resume-session-id"))
+          ;; Capture the session file from pending state (set by cust/agent-shell-with-resume)
+          (let ((session-file cust/agent-shell--pending-resume-session-file))
+            ;; Clear the pending file now that we've captured it
+            (setq cust/agent-shell--pending-resume-session-file nil)
+            (with-current-buffer (map-elt (agent-shell--state) :buffer)
+              (agent-shell--update-fragment
+               :state (agent-shell--state)
+               :block-id "starting"
+               :body (format "\n\nResuming session %s..." (substring resume-session-id 0 8))
+               :append t))
+            (acp-send-request
+             :client (map-elt (agent-shell--state) :client)
+             :request (cust/acp-make-session-resume-request
+                       resume-session-id
+                       (agent-shell--resolve-path (agent-shell-cwd))
+                       (agent-shell--mcp-servers))
+             :buffer (current-buffer)
+             :on-success (lambda (response)
+                           ;; Store session info
+                           (map-put! agent-shell--state
+                                     :session (list (cons :id resume-session-id)
+                                                    (cons :mode-id (map-nested-elt response '(modes currentModeId)))
+                                                    (cons :modes (mapcar (lambda (mode)
+                                                                           `((:id . ,(map-elt mode 'id))
+                                                                             (:name . ,(map-elt mode 'name))
+                                                                             (:description . ,(map-elt mode 'description))))
+                                                                         (map-nested-elt response '(modes availableModes))))
+                                                    (cons :model-id (map-nested-elt response '(models currentModelId)))
+                                                    (cons :models (mapcar (lambda (model)
+                                                                            `((:model-id . ,(map-elt model 'modelId))
+                                                                              (:name . ,(map-elt model 'name))
+                                                                              (:description . ,(map-elt model 'description))))
+                                                                          (map-nested-elt response '(models availableModels))))))
+                           (agent-shell--update-fragment
+                            :state agent-shell--state
+                            :block-id "starting"
+                            :label-left (format "%s %s"
+                                                (agent-shell--status-label "completed")
+                                                (propertize "Resumed session" 'font-lock-face 'font-lock-doc-markup-face))
+                            :body (if session-file
+                                      "\n\nLoading conversation history..."
+                                    "\n\nReady (no history file found)")
+                            :append t)
+                           (agent-shell--update-header-and-mode-line)
+                           ;; Call the session init callback
+                           (funcall on-session-init)
+                           ;; Now send the conversation history as context (if we have a file)
+                           (when session-file
+                             (cust/agent-shell--send-history-context
+                              session-file
+                              (current-buffer))))
+             :on-error (lambda (error)
+                         (agent-shell--update-fragment
+                          :state agent-shell--state
+                          :block-id "starting"
+                          :label-left (format "%s %s"
+                                              (agent-shell--status-label "failed")
+                                              (propertize "Session resume" 'font-lock-face 'font-lock-doc-markup-face))
+                          :body (format "\n\nError: %s" (or (map-elt error 'message) error))
+                          :append t)))))
+
+        (defvar cust/agent-shell--pending-resume-session-id nil
+          "Session ID to resume when initiating the next session.
+        This is a global variable used during the brief window between
+        starting agent-shell and session initialization.")
+
+        (defvar cust/agent-shell--pending-resume-session-file nil
+          "Session file path for the pending resume.
+        Set alongside the session ID, cleared after use.")
+
+        (defun cust/agent-shell-with-resume (session-id &optional cwd session-file)
+          "Start agent-shell and resume SESSION-ID.
+        CWD is the working directory (defaults to current project or default-directory).
+        SESSION-FILE is the path to the conversation JSONL file for history replay."
+          (interactive "sSession ID to resume: ")
+          (let* ((target-dir (or cwd
+                                 (projectile-project-root)
+                                 default-directory))
+                 (default-directory target-dir))
+            ;; Set the resume session ID and file BEFORE starting agent-shell
+            (setq cust/agent-shell--pending-resume-session-id session-id)
+            (setq cust/agent-shell--pending-resume-session-file session-file)
+            ;; Start agent-shell in the target directory
+            (agent-shell)
+            (message "Resuming session %s in %s" session-id target-dir)))
+
+        ;; Advice to intercept session initiation and inject resume parameter
+        (defun cust/agent-shell--initiate-session-advice (orig-fn &rest args)
+          "Advice to inject resume session ID into session initiation."
+          (if cust/agent-shell--pending-resume-session-id
+              (let ((resume-id cust/agent-shell--pending-resume-session-id)
+                    ;; Extract keyword args - args is (:shell val :on-session-init val)
+                    (shell (plist-get args :shell))
+                    (on-session-init (plist-get args :on-session-init)))
+                ;; Clear it so it's only used once
+                (setq cust/agent-shell--pending-resume-session-id nil)
+                ;; Call our custom initiate with resume
+                (cust/agent-shell--initiate-session-with-resume
+                 shell
+                 on-session-init
+                 resume-id))
+            ;; Normal flow
+            (apply orig-fn args)))
+
+        (advice-add 'agent-shell--initiate-session :around #'cust/agent-shell--initiate-session-advice)
+
+        (defun cust/agent-shell-resume (&optional all-projects)
+          "Interactively select and resume a previous Claude Code conversation.
+        With prefix argument ALL-PROJECTS or when called with non-nil argument,
+        show conversations from all projects. Otherwise show only conversations
+        from the current project."
+          (interactive "P")
+          (let* ((project-path (unless all-projects
+                                 (or (projectile-project-root)
+                                     default-directory)))
+                 (conversations (cust/agent-shell--list-conversations project-path)))
+            (if (null conversations)
+                (if all-projects
+                    (user-error "No conversations found in ~/.claude/projects/")
+                  (if (y-or-n-p "No conversations for current project. Show all projects? ")
+                      (cust/agent-shell-resume t)
+                    (user-error "No conversations found")))
+              ;; Build candidates for completing-read
+              (let* ((summary-width 45)
+                     (msgs-width 6)
+                     (branch-width 15)
+                     (candidates
+                      (mapcar (lambda (conv)
+                                (let* ((summary (plist-get conv :summary))
+                                       (first-msg (plist-get conv :first-message))
+                                       (raw-text (or summary
+                                                     (when first-msg
+                                                       (string-trim
+                                                        (replace-regexp-in-string "[\n\r]+" " " first-msg)))
+                                                     "(empty)"))
+                                       ;; Truncate/pad summary to fixed width
+                                       (display-text (if (> (length raw-text) summary-width)
+                                                         (concat (substring raw-text 0 (- summary-width 3)) "...")
+                                                       (format (format "%%-%ds" summary-width) raw-text)))
+                                       (msg-count (or (plist-get conv :message-count) 0))
+                                       (branch (or (plist-get conv :git-branch) "-"))
+                                       (branch-text (if (> (length branch) branch-width)
+                                                        (concat (substring branch 0 (- branch-width 2)) "..")
+                                                      (format (format "%%-%ds" branch-width) branch)))
+                                       (time (cust/agent-shell--format-timestamp
+                                              (plist-get conv :timestamp) nil))
+                                       (project-name (plist-get conv :project-name))
+                                       (id (plist-get conv :id))
+                                       (cwd (plist-get conv :cwd))
+                                       ;; Format with colors
+                                       (formatted
+                                        (concat
+                                         display-text
+                                         "  "
+                                         (propertize (format "%5d" msg-count) 'face 'font-lock-number-face)
+                                         "  "
+                                         (propertize branch-text 'face 'font-lock-constant-face)
+                                         "  "
+                                         (propertize time 'face 'font-lock-comment-face)
+                                         (when all-projects
+                                           (concat "  " (propertize (format "[%s]" project-name)
+                                                                    'face 'font-lock-comment-face))))))
+                                  ;; Store id, cwd, and file path
+                                  (cons formatted (list :id id :cwd cwd :file (plist-get conv :file)))))
+                              conversations))
+                     ;; Disable vertico sorting to preserve our timestamp order
+                     (vertico-sort-function nil)
+                     (vertico-sort-override-function nil)
+                     (selection (completing-read
+                                 (if all-projects
+                                     "Resume conversation (all projects): "
+                                   "Resume conversation: ")
+                                 candidates nil t))
+                     (selected (cdr (assoc selection candidates)))
+                     (session-id (plist-get selected :id))
+                     (session-cwd (plist-get selected :cwd))
+                     (session-file (plist-get selected :file)))
+                (when session-id
+                  (cust/agent-shell--resume-conversation session-id session-cwd session-file))))))
+
+        (defun cust/agent-shell-resume-all ()
+          "Resume a conversation from any project."
+          (interactive)
+          (cust/agent-shell-resume t))
+
+        ;; Keybinding for quick access
+        (map! :leader
+              (:prefix-map ("o" . "open")
+               :desc "Resume Claude conversation" "R" #'cust/agent-shell-resume))
+        ```
+
+    <!--list-separator-->
+
+    -  Conversation persistence (Claude Code compatible)
+
+        This section implements bidirectional conversation sharing between agent-shell
+        and Claude Code CLI. Conversations from agent-shell are written in Claude's
+        JSONL format, allowing them to be resumed from the terminal and vice versa.
+
+        <!--list-separator-->
+
+        -  Session state tracking
+
+            Track conversation state needed for Claude Code format: UUIDs, timestamps,
+            parent chains, etc.
+
+            ```emacs-lisp
+            (defvar-local cust/agent-shell--claude-session nil
+              "Claude Code compatible session state for the current buffer.
+            Contains: session-id, parent-uuid, message-count, project-dir, jsonl-file.")
+
+            (defvar cust/agent-shell--claude-version "2.1.7"
+              "Version string to use in Claude Code JSONL entries.
+            This should match Claude Code CLI version for compatibility.")
+
+            (defun cust/agent-shell--init-claude-session ()
+              "Initialize Claude Code compatible session tracking for current buffer.
+            Called lazily when first message is submitted."
+              (when-let* (((derived-mode-p 'agent-shell-mode))
+                          ((boundp 'agent-shell--state))
+                          (agent-shell--state)
+                          ((eq 'claude-code (map-elt (map-elt agent-shell--state :agent-config) :identifier)))
+                          (session-id (map-nested-elt agent-shell--state '(:session :id)))
+                          ;; Use default-directory instead of agent-shell-cwd to avoid shell-maker dependency
+                          (cwd (expand-file-name default-directory))
+                          (project-dir-name (cust/agent-shell--encode-project-path cwd))
+                          (project-dir (expand-file-name project-dir-name cust/agent-shell-claude-projects-dir))
+                          (jsonl-file (expand-file-name (concat session-id ".jsonl") project-dir)))
+                ;; Create project directory if needed
+                (make-directory project-dir t)
+                ;; Initialize session state
+                (setq cust/agent-shell--claude-session
+                      (list :session-id session-id
+                            :parent-uuid nil
+                            :message-count 0
+                            :cwd cwd
+                            :project-dir project-dir
+                            :jsonl-file jsonl-file
+                            :git-branch (cust/agent-shell--get-git-branch cwd)))
+                ;; Write initial queue-operation entry
+                (let* ((timestamp (cust/agent-shell--iso-timestamp))
+                       (entry (list (cons 'type "queue-operation")
+                                    (cons 'operation "dequeue")
+                                    (cons 'timestamp timestamp)
+                                    (cons 'sessionId session-id))))
+                  (cust/agent-shell--write-jsonl-entry entry))
+                (message "Claude session: %s" (file-name-nondirectory jsonl-file))))
+
+            (defun cust/agent-shell--get-git-branch (dir)
+              "Get current git branch for DIR, or nil if not in a git repo."
+              (let ((default-directory dir))
+                (when (file-directory-p (expand-file-name ".git" dir))
+                  (string-trim
+                   (shell-command-to-string "git rev-parse --abbrev-ref HEAD 2>/dev/null")))))
+
+            (defun cust/agent-shell--iso-timestamp ()
+              "Return current time as ISO 8601 timestamp with milliseconds."
+              (let ((time (current-time)))
+                (format "%s.%03dZ"
+                        (format-time-string "%Y-%m-%dT%H:%M:%S" time t)
+                        (/ (nth 2 time) 1000))))
+
+            (defun cust/agent-shell--generate-uuid ()
+              "Generate a UUID v4 string."
+              (format "%08x-%04x-%04x-%04x-%012x"
+                      (random (expt 16 8))
+                      (random (expt 16 4))
+                      (logior (ash 4 12) (random (expt 16 3)))  ; Version 4
+                      (logior (ash 2 14) (random (expt 16 4)))  ; Variant 1
+                      (random (expt 16 12))))
+            ```
+
+        <!--list-separator-->
+
+        -  JSONL writing
+
+            Write conversation entries in Claude Code's JSONL format.
+
+            ```emacs-lisp
+            (defun cust/agent-shell--write-jsonl-entry (entry)
+              "Write ENTRY as a JSON line to the current session's JSONL file."
+              (when-let ((session cust/agent-shell--claude-session)
+                         (jsonl-file (plist-get session :jsonl-file)))
+                (let ((json-str (json-encode entry)))
+                  (with-temp-buffer
+                    (insert json-str "\n")
+                    (write-region (point-min) (point-max) jsonl-file t 'silent)))))
+
+            (defun cust/agent-shell--write-user-message (text)
+              "Write a user message entry to the Claude JSONL file."
+              (when-let ((session cust/agent-shell--claude-session))
+                (let* ((uuid (cust/agent-shell--generate-uuid))
+                       (parent-uuid (plist-get session :parent-uuid))
+                       (cwd (plist-get session :cwd))
+                       (session-id (plist-get session :session-id))
+                       (git-branch (plist-get session :git-branch))
+                       (timestamp (cust/agent-shell--iso-timestamp))
+                       (content (vector (list (cons 'type "text") (cons 'text text))))
+                       (message (list (cons 'role "user") (cons 'content content)))
+                       (entry (list (cons 'parentUuid parent-uuid)
+                                    (cons 'isSidechain json-false)
+                                    (cons 'userType "external")
+                                    (cons 'cwd cwd)
+                                    (cons 'sessionId session-id)
+                                    (cons 'version cust/agent-shell--claude-version)
+                                    (cons 'gitBranch git-branch)
+                                    (cons 'type "user")
+                                    (cons 'message message)
+                                    (cons 'uuid uuid)
+                                    (cons 'timestamp timestamp))))
+                  ;; Update parent UUID for next message
+                  (plist-put cust/agent-shell--claude-session :parent-uuid uuid)
+                  (plist-put cust/agent-shell--claude-session :message-count
+                             (1+ (plist-get session :message-count)))
+                  (cust/agent-shell--write-jsonl-entry entry)
+                  uuid)))
+
+            (defun cust/agent-shell--write-assistant-message (text &optional tool-uses)
+              "Write an assistant message entry to the Claude JSONL file.
+            TEXT is the assistant's response. TOOL-USES is an optional list of tool calls."
+              (when-let ((session cust/agent-shell--claude-session))
+                (let* ((uuid (cust/agent-shell--generate-uuid))
+                       (parent-uuid (plist-get session :parent-uuid))
+                       (cwd (plist-get session :cwd))
+                       (session-id (plist-get session :session-id))
+                       (git-branch (plist-get session :git-branch))
+                       (timestamp (cust/agent-shell--iso-timestamp))
+                       (content (if tool-uses
+                                    (vconcat
+                                     (when text (vector (list (cons 'type "text") (cons 'text text))))
+                                     (mapcar (lambda (tool)
+                                               (list (cons 'type "tool_use")
+                                                     (cons 'id (plist-get tool :id))
+                                                     (cons 'name (plist-get tool :name))
+                                                     (cons 'input (plist-get tool :input))))
+                                             tool-uses))
+                                  (vector (list (cons 'type "text") (cons 'text text)))))
+                       (message (list (cons 'role "assistant") (cons 'content content)))
+                       (entry (list (cons 'parentUuid parent-uuid)
+                                    (cons 'isSidechain json-false)
+                                    (cons 'userType "external")
+                                    (cons 'cwd cwd)
+                                    (cons 'sessionId session-id)
+                                    (cons 'version cust/agent-shell--claude-version)
+                                    (cons 'gitBranch git-branch)
+                                    (cons 'type "assistant")
+                                    (cons 'message message)
+                                    (cons 'uuid uuid)
+                                    (cons 'timestamp timestamp))))
+                  ;; Update parent UUID
+                  (plist-put cust/agent-shell--claude-session :parent-uuid uuid)
+                  (cust/agent-shell--write-jsonl-entry entry)
+                  uuid)))
+
+            (defun cust/agent-shell--write-tool-result (tool-use-id result)
+              "Write a tool result entry for TOOL-USE-ID with RESULT."
+              (when-let ((session cust/agent-shell--claude-session))
+                (let* ((uuid (cust/agent-shell--generate-uuid))
+                       (parent-uuid (plist-get session :parent-uuid))
+                       (cwd (plist-get session :cwd))
+                       (session-id (plist-get session :session-id))
+                       (git-branch (plist-get session :git-branch))
+                       (timestamp (cust/agent-shell--iso-timestamp))
+                       (content (vector (list (cons 'tool_use_id tool-use-id)
+                                              (cons 'type "tool_result")
+                                              (cons 'content result))))
+                       (message (list (cons 'role "user") (cons 'content content)))
+                       (entry (list (cons 'parentUuid parent-uuid)
+                                    (cons 'isSidechain json-false)
+                                    (cons 'userType "external")
+                                    (cons 'cwd cwd)
+                                    (cons 'sessionId session-id)
+                                    (cons 'version cust/agent-shell--claude-version)
+                                    (cons 'gitBranch git-branch)
+                                    (cons 'type "user")
+                                    (cons 'message message)
+                                    (cons 'uuid uuid)
+                                    (cons 'timestamp timestamp))))
+                  (plist-put cust/agent-shell--claude-session :parent-uuid uuid)
+                  (cust/agent-shell--write-jsonl-entry entry)
+                  uuid)))
+            ```
+
+        <!--list-separator-->
+
+        -  Summary generation
+
+            Generate and prepend conversation summaries to the JSONL file.
+            Claude Code stores summaries at the beginning of the file.
+
+            ```emacs-lisp
+            (defun cust/agent-shell--generate-summary (text)
+              "Generate a short summary from TEXT (first user message or significant content).
+            Returns a string suitable for the summary field."
+              (let* ((clean-text (replace-regexp-in-string "[\n\r]+" " " text))
+                     (truncated (if (> (length clean-text) 60)
+                                    (concat (substring clean-text 0 57) "...")
+                                  clean-text)))
+                truncated))
+
+            (defun cust/agent-shell--write-summary (summary-text)
+              "Write a summary entry to the beginning of the JSONL file.
+            SUMMARY-TEXT is the conversation summary to add."
+              (when-let* ((session cust/agent-shell--claude-session)
+                          (jsonl-file (plist-get session :jsonl-file))
+                          (leaf-uuid (plist-get session :parent-uuid)))
+                (when (file-exists-p jsonl-file)
+                  (let* ((summary-entry `((type . "summary")
+                                          (summary . ,summary-text)
+                                          (leafUuid . ,leaf-uuid)))
+                         (summary-json (concat (json-encode summary-entry) "\n"))
+                         (existing-content (with-temp-buffer
+                                             (insert-file-contents jsonl-file)
+                                             (buffer-string))))
+                    ;; Prepend summary to file
+                    (with-temp-file jsonl-file
+                      (insert summary-json)
+                      (insert existing-content))))))
+
+            (defun cust/agent-shell--update-summary-on-idle ()
+              "Update conversation summary after idle time.
+            This runs periodically to keep the summary current."
+              (when-let* ((session cust/agent-shell--claude-session)
+                          (jsonl-file (plist-get session :jsonl-file))
+                          ((> (plist-get session :message-count) 0)))
+                ;; Read first user message for summary if we don't have one yet
+                (unless (plist-get session :summary-written)
+                  (when-let ((first-msg (cust/agent-shell--get-first-user-message jsonl-file)))
+                    (cust/agent-shell--write-summary
+                     (cust/agent-shell--generate-summary first-msg))
+                    (plist-put cust/agent-shell--claude-session :summary-written t)))))
+
+            (defun cust/agent-shell--get-first-user-message (jsonl-file)
+              "Get the first user message text from JSONL-FILE."
+              (when (file-exists-p jsonl-file)
+                (with-temp-buffer
+                  (insert-file-contents jsonl-file)
+                  (goto-char (point-min))
+                  (catch 'found
+                    (while (not (eobp))
+                      (let* ((line (buffer-substring-no-properties
+                                    (line-beginning-position) (line-end-position)))
+                             (json (ignore-errors (json-parse-string line :object-type 'alist))))
+                        (when (and json
+                                   (string= (alist-get 'type json) "user")
+                                   (alist-get 'message json))
+                          (let* ((message (alist-get 'message json))
+                                 (content (alist-get 'content message)))
+                            (when (and content (> (length content) 0))
+                              (throw 'found (alist-get 'text (aref content 0)))))))
+                      (forward-line 1))
+                    nil))))
+            ```
+
+        <!--list-separator-->
+
+        -  Hooks and integration
+
+            Hook into agent-shell to capture messages and write them in Claude format.
+
+            ```emacs-lisp
+            (defvar cust/agent-shell--pending-assistant-text ""
+              "Buffer for accumulating assistant message chunks.")
+
+            (defun cust/agent-shell--ensure-session ()
+              "Ensure Claude session is initialized, initializing lazily if needed.
+            Returns non-nil if session is ready."
+              (or cust/agent-shell--claude-session
+                  (when (and (derived-mode-p 'agent-shell-mode)
+                             (boundp 'agent-shell--state)
+                             agent-shell--state
+                             (map-nested-elt agent-shell--state '(:session :id))
+                             (eq 'claude-code (map-elt (map-elt agent-shell--state :agent-config) :identifier)))
+                    (cust/agent-shell--init-claude-session)
+                    cust/agent-shell--claude-session)))
+
+            (defun cust/agent-shell--capture-user-input (input)
+              "Capture user INPUT and write to Claude JSONL.
+            This is called via advice on shell-maker-submit."
+              (when (and (derived-mode-p 'agent-shell-mode)
+                         (stringp input)
+                         (not (string-empty-p (string-trim input)))
+                         (cust/agent-shell--ensure-session))
+                (cust/agent-shell--write-user-message (string-trim input))))
+
+            (defun cust/agent-shell--capture-assistant-chunk (text)
+              "Accumulate assistant TEXT chunks for later writing."
+              (when cust/agent-shell--claude-session
+                (setq cust/agent-shell--pending-assistant-text
+                      (concat cust/agent-shell--pending-assistant-text text))))
+
+            (defun cust/agent-shell--flush-assistant-message ()
+              "Write accumulated assistant message to JSONL and reset buffer."
+              (when (and cust/agent-shell--claude-session
+                         (not (string-empty-p cust/agent-shell--pending-assistant-text)))
+                (cust/agent-shell--write-assistant-message
+                 cust/agent-shell--pending-assistant-text)
+                (setq cust/agent-shell--pending-assistant-text "")))
+
+            ;; Advice to capture user input before submission
+            (defun cust/agent-shell--submit-advice (orig-fn &rest args)
+              "Advice for shell-maker-submit to capture user input."
+              (when (derived-mode-p 'agent-shell-mode)
+                (let ((input (string-trim
+                              (buffer-substring-no-properties
+                               (save-excursion
+                                 (goto-char (point-max))
+                                 (comint-line-beginning-position))
+                               (point-max)))))
+                  (unless (string-empty-p input)
+                    (cust/agent-shell--capture-user-input input))))
+              (apply orig-fn args))
+
+            (advice-add 'shell-maker-submit :around #'cust/agent-shell--submit-advice)
+
+            ;; No timers or mode hooks needed - session is initialized lazily
+            ;; on first message via cust/agent-shell--ensure-session below.
+            ```
+
+        <!--list-separator-->
+
+        -  Message capture via transcript advice
+
+            Hook into agent-shell's existing transcript system to capture messages.
+
+            ```emacs-lisp
+            (defun cust/agent-shell--transcript-advice (orig-fn &rest args)
+              "Advice for agent-shell--append-transcript to also write Claude JSONL.
+            Intercepts transcript writes to extract message content."
+              ;; Call original function
+              (apply orig-fn args)
+              ;; Extract text from args and determine message type
+              (when cust/agent-shell--claude-session
+                (let ((text (plist-get args :text)))
+                  (when (stringp text)
+                    (cond
+                     ;; Agent message header - flush any pending and prepare for new
+                     ((string-match "^## Agent" text)
+                      (cust/agent-shell--flush-assistant-message))
+                     ;; User message header - already captured via submit advice
+                     ((string-match "^## User" text)
+                      nil)
+                     ;; Actual content (not headers)
+                     ((and (not (string-match "^## " text))
+                           (not (string-match "^### Tool Call" text)))
+                      ;; This is message content, accumulate for assistant
+                      (cust/agent-shell--capture-assistant-chunk text)))))))
+
+            (advice-add 'agent-shell--append-transcript :around #'cust/agent-shell--transcript-advice)
+
+            ;; Flush assistant message when command finishes
+            (defun cust/agent-shell--on-command-finished ()
+              "Called when a command/response cycle completes."
+              (when cust/agent-shell--claude-session
+                (cust/agent-shell--flush-assistant-message)
+                (cust/agent-shell--update-summary-on-idle)))
+
+            ;; Hook into shell-maker's on-command-finished if available
+            ;; Note: shell-maker--config may be nil during early initialization,
+            ;; so we check both boundp AND non-nil. If nil, we skip - the transcript
+            ;; advice will still capture messages via agent-shell--append-transcript.
+            (add-hook 'agent-shell-mode-hook
+                      (lambda ()
+                        (when (and (boundp 'shell-maker--config) shell-maker--config)
+                          (let ((orig-fn (shell-maker-config-on-command-finished shell-maker--config)))
+                            (setf (shell-maker-config-on-command-finished shell-maker--config)
+                                  (lambda (input output success)
+                                    (when orig-fn (funcall orig-fn input output success))
+                                    (cust/agent-shell--on-command-finished)))))))
+            ```
+
+
+#### IBuffer {#ibuffer}
+
+<!--list-separator-->
+
+-  Projectile integration
+
+    By default, `ibuffer-projectile` only groups file-visiting buffers by project.
+    This advice extends it to include non-file buffers (like agent-shell, vterm,
+    compilation, etc.) based on their `default-directory`.
+
+    ```emacs-lisp
+    (defun cust/ibuffer-projectile-root-include-non-file-buffers (orig-fn buf)
+      "Advice to include non-file buffers in projectile groups.
+    Falls back to `default-directory' when `buffer-file-name' is nil."
+      (or (funcall orig-fn buf)
+          (with-current-buffer buf
+            (when-let ((root (ignore-errors (projectile-project-root))))
+              (cons (projectile-project-name) root)))))
+
+    (advice-add 'ibuffer-projectile-root :around #'cust/ibuffer-projectile-root-include-non-file-buffers)
+    ```
+
+<!--list-separator-->
+
+-  Casual Transient Menus
+
+    [Casual](https://github.com/kickingvegas/casual) provides discoverable transient menus for ibuffer operations
+    including filtering, sorting, and marking.
+
+    ```emacs-lisp
+    (package! casual)
+    ```
+
+    ```emacs-lisp
+    (defun cust/ibuffer-special-buffer-p (buf)
+      "Return non-nil if BUF name starts with *."
+      (string-prefix-p "*" (buffer-name buf)))
+
+    (defvar cust/ibuffer-hide-special-buffers nil
+      "When non-nil, hide buffers starting with *.")
+
+    (defun cust/ibuffer-toggle-special-buffers ()
+      "Toggle visibility of special buffers (those starting with *)."
+      (interactive)
+      (setq cust/ibuffer-hide-special-buffers (not cust/ibuffer-hide-special-buffers))
+      (if cust/ibuffer-hide-special-buffers
+          (progn
+            (add-to-list 'ibuffer-never-show-predicates #'cust/ibuffer-special-buffer-p)
+            (message "Hiding special buffers"))
+        (setq ibuffer-never-show-predicates
+              (remove #'cust/ibuffer-special-buffer-p ibuffer-never-show-predicates))
+        (message "Showing all buffers"))
+      (ibuffer-update nil t))
+
+    (use-package! casual
+      :after ibuffer
+      :config
+      (map! :map ibuffer-mode-map
+            :n "?"   #'casual-ibuffer-tmenu
+            :n "H"   #'cust/ibuffer-toggle-special-buffers
+            :n "F"   #'casual-ibuffer-filter-tmenu
+            :n "s"   #'casual-ibuffer-sortby-tmenu
+            :n "p"   #'ibuffer-backwards-next-marked
+            :n "n"   #'ibuffer-forward-next-marked
+            :n "C-k" #'ibuffer-backward-filter-group
+            :n "C-j" #'ibuffer-forward-filter-group
+            :n "$"   #'ibuffer-toggle-filter-group)
+
+      ;; Update transient menu keybindings to match our ibuffer-mode-map
+      (with-eval-after-load 'casual-ibuffer
+        (transient-suffix-put 'casual-ibuffer-tmenu "p" :key "k")   ; Move default p (prev line) to k
+        (transient-suffix-put 'casual-ibuffer-tmenu "n" :key "j")   ; Move default n (next line) to j
+        (transient-suffix-put 'casual-ibuffer-tmenu "{" :key "p")   ; Previous marked → p
+        (transient-suffix-put 'casual-ibuffer-tmenu "}" :key "n")   ; Next marked → n
+        (transient-suffix-put 'casual-ibuffer-tmenu "[" :key "C-k") ; Previous group → C-k
+        (transient-suffix-put 'casual-ibuffer-tmenu "]" :key "C-j")) ; Next group → C-j
+
+      (add-hook 'ibuffer-mode-hook #'hl-line-mode)
+      (add-hook 'ibuffer-mode-hook #'ibuffer-auto-mode))
     ```
 
 
@@ -2297,35 +3686,28 @@ and there's no need to use a different face.
 
 ```emacs-lisp
 (after! corfu
+  (setq corfu-quit-no-match t)  ;; Quit immediately when no match
   (map! :map corfu-map
-        "SPC" #'corfu-insert-separator))  ;; Enables multiple orderless patterns
+        "SPC" #'corfu-insert-separator  ;; Enables multiple orderless patterns
+        ;; Unbind C-n/C-p to free them for other modes (use C-j/C-k instead)
+        "C-n" nil
+        "C-p" nil))
 ```
 
-
-#### DAP {#dap}
-
-> From the `:tools debugger` module
-
-Debugging using `dap-mode` and `lsp` brings us breakpoints, a REPL, local variables view for current stack frames and more
-to Emacs.
-
-I have not used this too much, so it's currently at an experimental stage for my part.
-[Here's](https://youtu.be/0bilcQVSlbM) a link to a Systemcrafters Youtube video tutorial on `dap-mode`.
+Corfu uses child frames for its popup, which do not work in terminal Emacs. `corfu-terminal` replaces the popup with overlays so completion works correctly in `emacsclient -nw` sessions.
 
 ```emacs-lisp
-;; (after! dap-mode
+(package! corfu-terminal
+  :recipe (:host codeberg :repo "akib/emacs-corfu-terminal"))
+```
 
-;;   ;; There's a bug which cause the breakpoint fringe to disappear while
-;;   ;; the debug session is running. This little hook seems to fix it.
-;;   ;; https://github.com/emacs-lsp/dap-mode/issues/374#issuecomment-1140399819
-;;   (add-hook! +dap-running-session-mode
-;;     (set-window-buffer nil (current-buffer)))
-
-;;   ;; Doesn't really seem to be working, gotta reopen the buffer...
-;;   (add-hook! dap-terminated-hook (set-window-buffer nil (current-buffer)))
-
-;;   ;; Windows to be shown when debugging
-;;   (setq dap-auto-configure-features '(sessions locals breakpoints expressions controls tooltip)))
+```emacs-lisp
+(after! corfu
+  (corfu-terminal-mode +1)
+  (add-hook 'after-make-frame-functions
+            (lambda (frame)
+              (unless (display-graphic-p frame)
+                (corfu-popupinfo-mode -1)))))
 ```
 
 
@@ -2645,7 +4027,7 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
     - If Corfu popup is visible → complete the selection
     - If Copilot suggestion is showing → accept it
     - In Org mode → use org-cycle (handles structure templates, etc.)
-    - Otherwise → indent the current line"
+    - Otherwise → use indent-for-tab-command for context-aware indentation"
       (interactive)
       (cond
        ;; Corfu popup frame is actually visible
@@ -2664,18 +4046,9 @@ I like to drag stuff up and down using `C-<up>` and `C-<down>`.
        ;; Org mode: use org-cycle which handles structure templates (<s, <q, etc.)
        ((derived-mode-p 'org-mode)
         (org-cycle))
-       ;; Default: insert one indent level
+       ;; Default: context-aware indentation via the mode's indent command
        (t
-        (cust/smart-tab-indent))))
-
-    (defun cust/smart-tab-indent ()
-      "Insert one level of indentation based on current mode settings."
-      (if indent-tabs-mode
-          (insert "\t")
-        (insert (make-string (or (bound-and-true-p evil-shift-width)
-                                 tab-width
-                                 4)
-                             ?\s))))
+        (indent-for-tab-command))))
     ```
 
 <!--list-separator-->
@@ -2791,7 +4164,7 @@ Doom Emacs now uses [aphelieia](https://github.com/radian-software/apheleia) as 
 Override to use the latest version from Github.
 
 ```emacs-lisp
-(package! apheleia :recipe (:repo "radian-software/apheleia"))
+(package! apheleia :pin "e6e5d55" :recipe (:repo "radian-software/apheleia"))
 ```
 
 <!--list-separator-->
@@ -2904,6 +4277,15 @@ Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-f
 ```emacs-lisp
 (after! diff-hl
   (diff-hl-margin-mode 1))
+```
+
+```emacs-lisp
+(map! :leader
+      :desc "Previous hunk" "g p" #'+vc-gutter/previous-hunk  ;; From the =:tools vc= module
+      :desc "Next hunk"     "g n" #'+vc-gutter/next-hunk      ;; From the =:tools vc= module
+      "g [" nil                                               ;; Unbind default evil keybindings that conflict with ibuffer
+      "g ]" nil                                               ;; Unbind default evil keybindings that conflict with ibuffer
+      )
 ```
 
 <!--list-separator-->
@@ -3019,9 +4401,314 @@ Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-f
 
     ```emacs-lisp
     (after! magit
-      (setq git-commit-summary-max-length   80                  ;; Increase commit summary length
-            magit-copy-revision-abbreviated t                   ;; Copy short version of hashes
-            magit-list-refs-sortby          "-committerdate"))  ;; Sort by last commited date (latest on top)
+      (setq git-commit-summary-max-length       80                  ;; Increase commit summary length
+            git-commit-post-finish-hook-timeout 2                   ;; Wait longer for GPG/YubiKey PIN entry
+            magit-copy-revision-abbreviated     t                   ;; Copy short version of hashes
+            magit-list-refs-sortby              "-committerdate")   ;; Sort by last commited date (latest on top)
+
+      ;; Always suggest .worktrees directory for new worktrees
+      (setq magit-worktree-read-directory-name-function
+            (lambda (prompt)
+              (let* ((default-dir (expand-file-name ".worktrees" (magit-toplevel))))
+                (unless (file-exists-p default-dir)
+                  (make-directory default-dir t))
+                (read-directory-name prompt default-dir)))))
+    ```
+
+    Render ANSI escape codes (colors, icons, etc.) in the `*magit-process*` buffer.
+    This is useful when git hooks output colored text with Unicode characters.
+
+    Some tools output broken ANSI sequences where the ESC character (`\e`) is
+    stripped, leaving just `[37m` instead of `\e[37m`. We advise the magit process
+    filter to strip these broken sequences in real-time as output arrives.
+
+    ```emacs-lisp
+    (after! magit
+      (defun my/magit-process-filter-handle-ansi (fn proc string)
+        "Process ANSI sequences in magit process output.
+    Applies ansi-color to render valid sequences and strips broken ones."
+        ;; First strip broken sequences (missing ESC character)
+        (setq string (replace-regexp-in-string "\\[\\([0-9;]*\\)m" "" string))
+        ;; Then apply ansi-color to handle valid sequences
+        (setq string (ansi-color-apply string))
+        (funcall fn proc string))
+
+      (advice-add 'magit-process-filter
+                  :around #'my/magit-process-filter-handle-ansi))
+    ```
+
+<!--list-separator-->
+
+-  Branch Cleanup
+
+    Interactive command to bulk-delete local branches that are merged or whose
+    upstream tracking branch is gone. Accessible from the branch transient via `D`.
+
+    ```emacs-lisp
+    (after! magit
+      ;; --- Helper functions ---
+
+      (defvar cust/magit-cleanup--protected-branches '("main" "master" "trunk")
+        "Branch names that should never appear as cleanup candidates.")
+
+      (defun cust/magit-cleanup--merged-branches (base)
+        "Return list of local branches merged into BASE.
+    Excludes BASE itself, the current branch, and protected branches."
+        (let* ((current (magit-get-current-branch))
+               (output (magit-git-lines "branch" "--merged" base))
+               (branches
+                (cl-loop for line in output
+                         for branch = (string-trim line)
+                         ;; Strip leading "* " (current) or "+ " (worktree) markers
+                         for name = (cond
+                                     ((string-prefix-p "* " branch) (substring branch 2))
+                                     ((string-prefix-p "+ " branch) (substring branch 2))
+                                     (t branch))
+                         unless (or (string= name base)
+                                    (string= name current)
+                                    (string-empty-p name)
+                                    (member name cust/magit-cleanup--protected-branches))
+                         collect name)))
+          branches))
+
+      (defun cust/magit-cleanup--gone-branches ()
+        "Return list of local branches whose upstream tracking branch is gone.
+    Excludes protected branches."
+        (let* ((output (magit-git-lines
+                        "branch" "--format=%(refname:short) %(upstream:track)")))
+          (cl-loop for line in output
+                   for trimmed = (string-trim line)
+                   when (string-match "\\`\\(.+\\) \\[gone\\]\\'" trimmed)
+                   unless (member (match-string 1 trimmed)
+                                  cust/magit-cleanup--protected-branches)
+                   collect (match-string 1 trimmed))))
+
+      ;; --- Buffer state ---
+
+      (defvar-local cust/magit-cleanup--branches nil
+        "Alist of (BRANCH . SELECTED-P) for cleanup candidates.")
+
+      (defvar-local cust/magit-cleanup--prune nil
+        "Whether to prune remote tracking branches.")
+
+      (defvar-local cust/magit-cleanup--base nil
+        "The base branch used for merge detection.")
+
+      (defvar-local cust/magit-cleanup--merged nil
+        "List of branch names that are merged.")
+
+      (defvar-local cust/magit-cleanup--gone nil
+        "List of branch names whose upstream is gone.")
+
+      ;; --- Mode and rendering ---
+
+      (defvar magit-branch-cleanup-mode-map
+        (make-sparse-keymap)
+        "Keymap for `magit-branch-cleanup-mode'.")
+
+      (define-derived-mode magit-branch-cleanup-mode special-mode "Branch-Cleanup"
+        "Major mode for selecting branches to delete."
+        (setq truncate-lines t)
+        (setq buffer-read-only t))
+
+      (evil-define-key 'normal magit-branch-cleanup-mode-map
+        (kbd "t")   #'cust/magit-cleanup--toggle
+        (kbd "RET") #'cust/magit-cleanup--toggle
+        (kbd "a")   #'cust/magit-cleanup--select-all
+        (kbd "u")   #'cust/magit-cleanup--deselect-all
+        (kbd "x")   #'cust/magit-cleanup--execute
+        (kbd "j")   #'cust/magit-cleanup--next
+        (kbd "n")   #'cust/magit-cleanup--next
+        (kbd "k")   #'cust/magit-cleanup--prev
+        (kbd "p")   #'cust/magit-cleanup--prev
+        (kbd "q")   #'quit-window)
+
+      (defun cust/magit-cleanup--render ()
+        "Render the cleanup buffer contents."
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (propertize (format "Branch Cleanup (base: %s)\n\n"
+                                      cust/magit-cleanup--base)
+                              'face 'magit-section-heading))
+          ;; Merged branches
+          (when cust/magit-cleanup--merged
+            (insert (propertize (format "Merged into %s:\n" cust/magit-cleanup--base)
+                                'face 'magit-section-secondary-heading))
+            (dolist (branch cust/magit-cleanup--merged)
+              (let ((selected (alist-get branch cust/magit-cleanup--branches
+                                         nil nil #'string=)))
+                (insert (format "%s %s\n"
+                                (if selected "[x]" "[ ]")
+                                (propertize branch 'face 'magit-branch-local)))))
+            (insert "\n"))
+          ;; Gone branches
+          (when cust/magit-cleanup--gone
+            (insert (propertize "Upstream gone:\n"
+                                'face 'magit-section-secondary-heading))
+            (dolist (branch cust/magit-cleanup--gone)
+              (let ((selected (alist-get branch cust/magit-cleanup--branches
+                                         nil nil #'string=)))
+                (insert (format "%s %s\n"
+                                (if selected "[x]" "[ ]")
+                                (propertize branch 'face 'magit-branch-local)))))
+            (insert "\n"))
+          ;; Prune option
+          (insert "---\n")
+          (insert (format "%s Prune remote tracking branches (git fetch --prune)\n\n"
+                          (if cust/magit-cleanup--prune "[x]" "[ ]")))
+          ;; Help line
+          (insert (propertize "[t] toggle  [a] all  [u] none  [x] execute  [q] quit"
+                              'face 'font-lock-comment-face))
+          (goto-char (point-min))
+          ;; Move to first selectable item
+          (cust/magit-cleanup--next)))
+
+      ;; --- Navigation ---
+
+      (defun cust/magit-cleanup--branch-at-point ()
+        "Return the branch name at point, or nil."
+        (save-excursion
+          (beginning-of-line)
+          (when (looking-at "\\[.\\] \\(.+\\)$")
+            (match-string-no-properties 1))))
+
+      (defun cust/magit-cleanup--prune-line-p ()
+        "Return non-nil if point is on the prune option line."
+        (save-excursion
+          (beginning-of-line)
+          (looking-at "\\[.\\] Prune remote")))
+
+      (defun cust/magit-cleanup--next ()
+        "Move to the next selectable item."
+        (interactive)
+        (let ((found nil))
+          (while (and (not found) (not (eobp)))
+            (forward-line 1)
+            (when (or (cust/magit-cleanup--branch-at-point)
+                      (cust/magit-cleanup--prune-line-p))
+              (setq found t)))
+          (beginning-of-line)))
+
+      (defun cust/magit-cleanup--prev ()
+        "Move to the previous selectable item."
+        (interactive)
+        (let ((found nil))
+          (while (and (not found) (not (bobp)))
+            (forward-line -1)
+            (when (or (cust/magit-cleanup--branch-at-point)
+                      (cust/magit-cleanup--prune-line-p))
+              (setq found t)))
+          (beginning-of-line)))
+
+      ;; --- Toggle and selection ---
+
+      (defun cust/magit-cleanup--toggle ()
+        "Toggle the item under point."
+        (interactive)
+        (cond
+         ((cust/magit-cleanup--branch-at-point)
+          (let* ((branch (cust/magit-cleanup--branch-at-point))
+                 (current (alist-get branch cust/magit-cleanup--branches
+                                    nil nil #'string=)))
+            (setf (alist-get branch cust/magit-cleanup--branches nil nil #'string=)
+                  (not current))
+            (cust/magit-cleanup--refresh-line)))
+         ((cust/magit-cleanup--prune-line-p)
+          (setq cust/magit-cleanup--prune (not cust/magit-cleanup--prune))
+          (cust/magit-cleanup--refresh-line))))
+
+      (defun cust/magit-cleanup--refresh-line ()
+        "Refresh the checkbox on the current line."
+        (let ((inhibit-read-only t))
+          (save-excursion
+            (beginning-of-line)
+            (when (looking-at "\\[.\\]")
+              (cond
+               ((cust/magit-cleanup--branch-at-point)
+                (let* ((branch (cust/magit-cleanup--branch-at-point))
+                       (selected (alist-get branch cust/magit-cleanup--branches
+                                            nil nil #'string=)))
+                  (delete-region (line-beginning-position) (line-end-position))
+                  (insert (format "%s %s"
+                                  (if selected "[x]" "[ ]")
+                                  (propertize branch 'face 'magit-branch-local)))))
+               ((cust/magit-cleanup--prune-line-p)
+                (delete-region (line-beginning-position) (line-end-position))
+                (insert (format "%s Prune remote tracking branches (git fetch --prune)"
+                                (if cust/magit-cleanup--prune "[x]" "[ ]")))))))))
+      (defun cust/magit-cleanup--select-all ()
+        "Select all branches."
+        (interactive)
+        (setq cust/magit-cleanup--branches
+              (mapcar (lambda (pair) (cons (car pair) t))
+                      cust/magit-cleanup--branches))
+        (cust/magit-cleanup--render))
+
+      (defun cust/magit-cleanup--deselect-all ()
+        "Deselect all branches."
+        (interactive)
+        (setq cust/magit-cleanup--branches
+              (mapcar (lambda (pair) (cons (car pair) nil))
+                      cust/magit-cleanup--branches))
+        (cust/magit-cleanup--render))
+
+      ;; --- Execution ---
+
+      (defun cust/magit-cleanup--execute ()
+        "Delete selected branches and optionally prune remotes."
+        (interactive)
+        (let* ((selected (cl-loop for (branch . sel) in cust/magit-cleanup--branches
+                                  when sel collect branch))
+               (prune cust/magit-cleanup--prune)
+               (count (length selected)))
+          (when (and (= count 0) (not prune))
+            (user-error "No branches selected and prune not enabled"))
+          (when (yes-or-no-p
+                 (format "Delete %d branch%s%s? "
+                         count
+                         (if (= count 1) "" "es")
+                         (if prune " and prune remotes" "")))
+            (dolist (branch selected)
+              (magit-run-git "branch" "-d" branch))
+            (when prune
+              (magit-run-git "fetch" "--prune"))
+            (magit-refresh)
+            (quit-window t)
+            (message "Deleted %d branch%s%s."
+                     count
+                     (if (= count 1) "" "es")
+                     (if prune ", pruned remotes" "")))))
+
+      ;; --- Entry point ---
+
+      (defun cust/magit-branch-cleanup ()
+        "Interactively select and delete merged/orphaned branches."
+        (interactive)
+        (let* ((base (magit-main-branch))
+               (merged (cust/magit-cleanup--merged-branches base))
+               (gone (cust/magit-cleanup--gone-branches))
+               (all-branches (cl-union merged gone :test #'string=)))
+          (if (null all-branches)
+              (message "No branches to clean up.")
+            (let ((buf (get-buffer-create "*magit-branch-cleanup*")))
+              (with-current-buffer buf
+                (magit-branch-cleanup-mode)
+                (setq cust/magit-cleanup--base base)
+                (setq cust/magit-cleanup--merged merged)
+                (setq cust/magit-cleanup--gone gone)
+                (setq cust/magit-cleanup--branches
+                      (mapcar (lambda (b) (cons b t)) all-branches))
+                (setq cust/magit-cleanup--prune nil)
+                (cust/magit-cleanup--render))
+              (let ((win (display-buffer-in-side-window
+                          buf '((side . bottom)))))
+                (when win
+                  (fit-window-to-buffer win)
+                  (select-window win)))))))
+
+      ;; Register in branch transient
+      (transient-append-suffix 'magit-branch "x"
+        '("D" "Cleanup" cust/magit-branch-cleanup)))
     ```
 
 <!--list-separator-->
@@ -3037,8 +4724,40 @@ Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-f
     ;; Emojis are fun!
     (add-hook 'code-review-mode-hook #'emojify-mode)
 
+    ;; Bind ? to the transient menu in code-review buffers
+    (map! :after code-review
+          :map code-review-mode-map
+          :n "?" #'code-review-transient-api
+          :n "C-n" #'magit-section-forward
+          :n "C-p" #'magit-section-backward)
+
     ;; Use the forge credentials for authentication (from ~/.authinfo.gpg)
     (setq code-review-auth-login-marker 'forge)
+
+    ;; Open the review buffer in the current window instead of a bottom split
+    (setq code-review-new-buffer-window-strategy #'switch-to-buffer)
+
+    ;; Fix closql v2.3+ compatibility: closql--remake-instance produces objects
+    ;; with an eieio--class struct at index 0 instead of a class name symbol.
+    ;; When closql-insert later calls closql--abbrev-class on the coerced list,
+    ;; it fails because the method only dispatches on (subclass closql-object).
+    ;; Normalizing index 0 before insert fixes this.
+    (define-advice closql-insert (:before (_db obj &optional _replace) code-review-fix-class-tag)
+      (when (eieio--class-p (aref obj 0))
+        (aset obj 0 (eieio--class-name (aref obj 0)))))
+
+    ;; Fix stale reference to code-review-db-connection (removed in closql v2 migration).
+    ;; The old variable no longer exists; closql manages connections internally now.
+    (define-advice code-review-db-all-unfinished (:override () code-review-fix-stale-connection)
+      (let ((class 'code-review-db-pullreq)
+            (db (code-review-db)))
+        (->> (emacsql db
+                      [:select :*
+                       :from 'pullreq
+                       :where (and (= saved 't)
+                                   (is finished nil))])
+             (mapcar
+              (lambda (row) (closql--remake-instance class db row))))))
     ```
 
 <!--list-separator-->
@@ -3052,10 +4771,6 @@ Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-f
       (setq gitlab.user "user"
             forge-add-default-bindings nil)
       (add-to-list 'forge-alist '("gitlab.intility.com" "gitlab.intility.com/api/v4" "gitlab.intility.com" forge-gitlab-repository)))
-
-    ;;; Browse remotes
-    (require 'browse-at-remote)
-    (add-to-list 'browse-at-remote-remote-type-regexps '("^gitlab\\.intility\\.com$" . "gitlab"))
     ```
 
 
@@ -3063,9 +4778,7 @@ Configure `diff-hl` to use margin mode to avoid fringe conflicts with `treesit-f
 
 > From the `:completion vertico` module
 
-[Marginalia](https://github.com/minad/marginalia) is a tool (written by the same author as vertico) which adds marginalia to the
-mini-buffer completions. Marginalia are marks and annotations placed at the margin of a page
-in a book.
+[Marginalia](https://github.com/minad/marginalia) is a tool (written by the same author as vertico) which adds marginalia to the mini-buffer completions. Marginalia are marks and annotations placed at the margin of a page in a book.
 
 The below settings are basically just copied of [tecosaur's](https://tecosaur.github.io/emacs-config/config.html#marginalia) config, and makes it look a bit nicer.
 
@@ -3384,7 +5097,7 @@ Make `treemacs` pretty and functional.
 `lsp-treemacs` integrates `treemacs` with `lsp-mode`.
 
 ```emacs-lisp
-(after! (treemacs lsp-mode)
+(after! lsp-treemacs
   (lsp-treemacs-sync-mode 1))
 
 (map! :leader
@@ -3471,7 +5184,22 @@ Load `vterm-anti-flicker-filter` before `vterm` so the hook attaches properly:
 ```emacs-lisp
 (use-package! vterm-anti-flicker-filter
   :defer t
-  :hook (vterm-mode . vterm-anti-flicker-filter-enable))
+  :hook (vterm-mode . vterm-anti-flicker-filter-enable)
+  :config
+  (setq claude-code-ide-vterm-render-delay nil))
+```
+
+```emacs-lisp
+(use-package! vterm
+  :config
+  (setq vterm-timer-delay nil)
+  ;; Fix: vterm-send-return sends LF when icrnl=t, but terminal expects CR
+  (defun vterm-send-return ()
+    "Send CR to the libvterm."
+    (interactive)
+    (deactivate-mark)
+    (when vterm--term
+      (process-send-string vterm--process "\C-m"))))
 ```
 
 ```emacs-lisp
@@ -3491,8 +5219,19 @@ Load `vterm-anti-flicker-filter` before `vterm` so the hook attaches properly:
       :n "M-<backspace>" #'vterm-send-meta-backspace
       :i "C-<backspace>" #'vterm-send-meta-backspace
       :n "C-<backspace>" #'vterm-send-meta-backspace
-      :i "C-g"        #'vterm-send-escape
-      :n "C-g"        #'vterm-send-escape
+      ;; Send C-g to cancel shell operations, but send ESC in claude-code-ide buffers
+      ;; to avoid triggering VS Code (Claude Code interprets C-g as "open in editor")
+      :i "C-g"        (lambda () (interactive)
+                        (if (string-prefix-p "*claude-code[" (buffer-name))
+                            (vterm-send-escape)
+                          (process-send-string vterm--process "\C-g")))
+      :n "C-g"        (lambda () (interactive)
+                        (if (string-prefix-p "*claude-code[" (buffer-name))
+                            (vterm-send-escape)
+                          (process-send-string vterm--process "\C-g")))
+      ;; TAB for shell completion
+      :i "TAB"        #'vterm-send-tab
+      :i "<tab>"      #'vterm-send-tab
       ;; Meta+Enter sends a newline character to the vterm process
       :i "M-<return>" (lambda () (interactive) (process-send-string vterm--process "\n"))
       :n "M-<return>" (lambda () (interactive) (process-send-string vterm--process "\n"))
@@ -3508,6 +5247,17 @@ Load `vterm-anti-flicker-filter` before `vterm` so the hook attaches properly:
       "M-7"  #'winum-select-window-7
       "M-8"  #'winum-select-window-8
       "M-9"  #'winum-select-window-9)
+```
+
+Enable Evil motion state for `vterm-copy-mode` (read-only friendly):
+
+```emacs-lisp
+(after! vterm
+  (add-hook 'vterm-copy-mode-hook
+            (lambda ()
+              (if vterm-copy-mode
+                  (evil-motion-state)
+                (evil-insert-state)))))
 ```
 
 
@@ -3719,10 +5469,6 @@ are terminated."
       (call-process "pkill" nil nil nil "-P" (number-to-string pid))))
 
   (add-hook 'lsp-after-uninitialized-functions #'cust/kill-lsp-child-processes))
-
-(after! lsp-ui
-  (define-key lsp-ui-mode-map [remap xref-find-definitions] #'lsp-ui-peek-find-definitions)
-  (define-key lsp-ui-mode-map [remap xref-find-references] #'lsp-ui-peek-find-references))
 ```
 
 <!--list-separator-->
@@ -3858,6 +5604,7 @@ Everybody likes org-mode!
 
 ```emacs-lisp
 (setq org-directory                             (concat (file-name-as-directory user-home-directory) "OneDrive/org")
+      org-agenda-files                          (list org-directory)
       org-cliplink-transport-implementation     'curl
       org-crypt-key                             "rhblind@gmail.com"
       org-tag-alist                             '(("crypt" . ?c))
@@ -4691,7 +6438,7 @@ Add all `org-roam` files to list of extra files to be searched by text commands.
 
         ```emacs-lisp
         ;; (setf (alist-get 'height +org-capture-frame-parameters) 15)
-        ;; ;; (alist-get 'name +org-capture-frame-parameters) "❖ Capture") ;; ATM hardcoded in other places, so changing breaks stuff
+        ;; ;; (setf (alist-get 'name +org-capture-frame-parameters) "❖ Capture") ;; ATM hardcoded in other places, so changing breaks stuff
         ;; (setq +org-capture-fn
         ;;       (lambda ()
         ;;         (interactive)
@@ -4941,22 +6688,6 @@ It's recommended to use `plist` for deserialization. In order to achieve that we
 `LSP_USE_PLISTS=true` environmental variable and ensure that Emacs knows about it (before `lsp-mode` is compiled).
 
 
-#### Debugging {#debugging}
-
-> DAP expects ptvsd by default as the Python debugger, however debugpy is recommended.
-
-So be sure to install `debugpy`.
-
-```shell
-$ pip3 install debugpy --user
-```
-
-```emacs-lisp
-(after! (python dap-mode)
-  (setq dap-python-debugger 'debugpy))
-```
-
-
 ### Elixir {#elixir}
 
 Use the latest and greatest!
@@ -4980,9 +6711,41 @@ Use the latest and greatest!
 ```
 
 
+#### Dexter LSP {#dexter-lsp}
+
+[Dexter](https://github.com/remoteoss/dexter) is Remote's take on an LSP server for Elixir written in Go.
+
+Install Dexter globally using mise:
+
+```shell
+mise plugin add dexter https://github.com/remoteoss/dexter.git && mise use -g dexter@latest
+```
+
+Remember to add `.dexter.db*` to your `.gitignore` file.
+
+```emacs-lisp
+(after! lsp-mode
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection
+                     (lambda () (list (string-trim (shell-command-to-string "mise which dexter")) "lsp")))
+    :major-modes '(elixir-mode elixir-ts-mode heex-ts-mode)
+    :priority 2  ; Higher priority than expert-ls, so dexter is preferred
+    :server-id 'dexter-ls
+    :initialization-options (lambda ()
+                             (list :followDelegates t
+                                   :debug nil))
+    :notification-handlers (lsp-ht ("window/logMessage" 'ignore))
+    :add-on? nil)))
+
+;; Note: The hook for lsp is already set up for elixir-ts-mode after expert-ls configuration
+```
+
+
 #### Expert LSP {#expert-lsp}
 
-The official language server for Elixir.
+The official language server for Elixir. Kept as a fallback but disabled from auto-starting
+so dexter-ls is always used. Enable manually with `M-x lsp` if needed.
 
 ```emacs-lisp
 (after! lsp-mode
@@ -4995,31 +6758,63 @@ The official language server for Elixir.
     :server-id 'expert-ls
     :initialization-options (lambda () (list :clientInfo (list :name "expert-ls")))
     :notification-handlers (lsp-ht ("window/logMessage" 'ignore))
-    :add-on? nil)))
+    :add-on? nil))
+  )
 
 (add-hook! 'elixir-ts-mode-hook #'lsp)
 ```
 
 
-#### Tidewave (MCP) {#tidewave--mcp}
+#### Formatting {#formatting}
+
+Configure `mix format` to run from the project root where `.formatter.exs` lives.
+This ensures it respects project-specific formatting settings like line length.
+
+CRITICAL: We MUST redirect stderr to prevent compilation output from overwriting files.
+We save stdin to a temp file, format it, and output the result to ensure clean handling.
 
 ```emacs-lisp
-(defun cust/mcp-hub-start-elixir-servers ()
-  ;; Tidewave MCP (https://github.com/tidewave-ai/tidewave_phoenix) for Phoenix Framework
-  (add-to-list 'mcp-hub-servers '("tidewave" . (:url "http://localhost:4000/tidewave/mcp")))
-
-  ;; HexDocsMCP (https://github.com/bradleygolden/hexdocs-mcp) allows agents to download
-  ;; documentation from hexdocs.pm
-  ;; NOTE: HexDocsMPC requires ollama for generating embeddings using the `mxbai-embed-large' model.
-  ;; $ ollama pull mxbai-embed-large
-  ;; (add-to-list 'mcp-hub-servers '("hexdocs" . (:command "npx" :args ("-y" "hexdocs-mcp@0.6.0"))))
-  (mcp-hub-start-all-server))
-
-(add-hook! 'elixir-mode-hook #'cust/mcp-hub-start-elixir-servers)
+(after! apheleia
+  (setf (alist-get 'mix-format apheleia-formatters)
+        '("sh" "-c"
+          "t=$(mktemp); cat > \"$t\"; cd $(git rev-parse --show-toplevel 2>/dev/null || pwd) && mix format \"$t\" 2>/dev/null && cat \"$t\"; rm -f \"$t\"")))
 ```
 
 
-### C-Sharp {#c-sharp}
+### Erlang {#erlang}
+
+
+#### Formatting {#formatting}
+
+Configure apheleia to use `rebar3 fmt` for Erlang formatting. The formatter must run from
+the project root (where `rebar.config` lives), so we use `apheleia-from-project-root`.
+
+```emacs-lisp
+(after! apheleia
+  (setf (alist-get 'erlfmt apheleia-formatters)
+        '("apheleia-from-project-root" "rebar.config" "rebar3" "fmt" "-")))
+
+(add-hook! 'erlang-mode-hook #'apheleia-mode)
+```
+
+
+#### ELP (Erlang Language Platform LSP Server) {#elp--erlang-language-platform-lsp-server}
+
+```emacs-lisp
+  (after! lsp-mode
+    (lsp-register-client
+     (make-lsp-client
+      :new-connection (lsp-stdio-connection
+                       (lambda () (list (concat user-home-directory ".local/bin/elp") "server")))
+      :major-modes '(erlang-mode)
+      :priority 1
+      :server-id 'elp)))
+
+  (add-hook! 'erlang-mode-hook #'lsp)
+```
+
+
+### CSharp {#csharp}
 
 Remap `csharp-mode` to the tree-sitter equivalent.
 
@@ -5031,9 +6826,8 @@ Remap `csharp-mode` to the tree-sitter equivalent.
 ;; Disable prettify-symbols-mode for C# modes
 (defun +csharp--disable-prettify-symbols-a (&rest _)
   "Prevent prettify-symbols-mode from being enabled in C# buffers."
-  (when (or (eq major-mode 'csharp-mode)
-            (eq major-mode 'csharp-ts-mode))
-    nil))
+  (not (or (eq major-mode 'csharp-mode)
+           (eq major-mode 'csharp-ts-mode))))
 
 (advice-add 'prettify-symbols-mode :before-while #'+csharp--disable-prettify-symbols-a)
 ```
@@ -5131,29 +6925,15 @@ Otherwise, use the global installation at ~/.local/bin/csharp-ls."
 ```
 
 
-#### DAP {#dap}
-
-To make DAP work nicely we need to install the netcoredbg. It's supposed to be able to
-install automatically using `M-x dap-netcore-update-debugger`, but it's not working correctly for me.
-The correct version can be downloaded from <https://github.com/Samsung/netcoredbg/releases>,
-and put in `~/.config/emacs/.local/cache/.cache/lsp/netcoredbg`.
-
-```emacs-lisp
-(after! (dotnet dap-mode)
-  (require 'dap-netcore)
-  (setq dap-netcore-install-dir (f-join user-emacs-directory ".cache" "lsp")))
-```
-
-
 #### Keybindings {#keybindings}
 
 Add the `sharper-main-transient` menu to local leader.
 
 ```emacs-lisp
-;; (map! :map csharp-ts-mode-map
-;;       :after csharp-ts-mode
-;;       :localleader
-;;       :desc "Sharper" "s" #'sharper-main-transient)
+(map! :map csharp-ts-mode-map
+      :after csharp-ts-mode
+      :localleader
+      :desc "Sharper" "s" #'sharper-main-transient)
 ```
 
 
@@ -5226,6 +7006,25 @@ Advice the `*cargo-run*` buffer to accept user input (why doesn't it already?).
 
 #### LSP Rust {#lsp-rust}
 
+Auto-detect `Cargo.toml` by walking up from the current file. This handles Rust crates nested inside
+non-Rust projects (e.g. a NIF inside an Elixir umbrella).
+
+```emacs-lisp
+(defun cust/find-cargo-toml ()
+  "Walk up from `buffer-file-name' and return the nearest Cargo.toml path, or nil."
+  (when-let ((file (buffer-file-name)))
+    (let ((dir (locate-dominating-file (file-name-directory file) "Cargo.toml")))
+      (when dir
+        (expand-file-name "Cargo.toml" dir)))))
+
+(after! (rustic lsp-mode)
+  (add-hook 'rustic-mode-hook
+            (lambda ()
+              (when-let ((cargo (cust/find-cargo-toml)))
+                (setq lsp-rust-analyzer-linked-projects (vector cargo))))
+            -90))
+```
+
 Configures `lsp-mode` hints for Rust (using `rust-analyzer`)
 (From [rust-emacs-setup](https://robert.kra.hn/posts/rust-emacs-setup/) guide)
 
@@ -5250,63 +7049,6 @@ Configures `lsp-ui` for Rust
   (setq lsp-ui-peek-always-show         t
         lsp-ui-sideline-show-hover      t
         lsp-ui-doc-enable               nil))
-```
-
-
-#### Debugging {#debugging}
-
-Configures `dap-mode` for Rust.
-
-We need to do some additional work for setting up debugging.
-(From [rust-emacs-setup](https://robert.kra.hn/posts/rust-emacs-setup/) guide)
-
-1.  Install `llvm` and `cmake` via homebrew
-2.  Checkout the [lldb-mi](https://github.com/lldb-tools/lldb-mi) repo
-3.  Build the `lldb-mi` binary
-4.  Link to a location in `$PATH`
-
-<!--listend-->
-
-```shell
-$ brew install cmake llvm
-$ export LLVM_DIR=/usr/local/Cellar/llvm/14.0.6/lib/cmake
-$ git clone https://github.com/lldb-tools/lldb-mi ~/.local/src/lldb-mi
-$ mkdir -p ~/.local/src/lldb-mi/build
-$ cd ~/.local/src/lldb-mi/build
-$ cmake ..
-$ cmake --build .
-$ ln -s $PWD/src/lldb-mi ~/.local/bin/lldb-mi
-```
-
-TODO - Should set LLVM_DIR a better way?
-
-```emacs-lisp
-(after! (rustic dap-mode)
-  (require 'dap-lldb)
-  (require 'dap-gdb-lldb)
-  (dap-gdb-lldb-setup)
-  (dap-register-debug-template "Rust::LLDB Run Configuration"
-                               (list :type      "lldb"
-                                     :request   "launch"
-                                     :name      "LLDB::Run"
-                                     :gdbpath   "rust-lldb"
-                                     :target     nil
-                                     :cwd       nil)))
-```
-
-> (dap-gdb-lldb-setup) will install a VS Code extension into user-emacs-dir/.extension/vscode/webfreak.debug.
-> One problem I observed was that this installation is not always successful. Should you end up without
-> a “webfreak.debug” directory you might need to delete the vscode/ folder and
-> run (dap-gdb-lldb-setup) again.
-
-EDIT - It turns out my "webfreak.debug" directory is empty - Figure this out at some time!
-
-Finally run `sudo DevToolsSecurity --enable` to allow the debugger access to processes.
-
-```shell
-$ sudo DevToolsSecurity --enable
-Enter PIN for 'Certificate For PIV Authentication (Yubico PIV Authentication)':
-Developer mode is now enabled.
 ```
 
 
