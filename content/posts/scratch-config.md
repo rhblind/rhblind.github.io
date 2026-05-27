@@ -1,7 +1,7 @@
 +++
 title = "Scratch Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2026-05-20T01:24:15+02:00
+lastmod = 2026-05-28T00:47:11+02:00
 tags = ["org-mode"]
 categories = ["emacs", "scratch"]
 draft = false
@@ -679,9 +679,7 @@ scripts alongside the elisp.
               :files ("*.el" "tools/*.el")))
 ```
 
-Start the Unix-socket server after Emacs goes idle for the first
-time.  Deferring keeps the heavy org/gnus requires out of the
-critical startup path (~1.8 s saved).
+Start the Unix-socket server after Emacs goes idle for the first time.
 
 ```emacs-lisp
 (use-package mcp-server
@@ -748,10 +746,13 @@ late-arriving callback.
 
 (defun scratch/gptel-magit-callback-wrapper (msg)
   "Forward MSG to the saved callback, unless generation was cancelled."
-  (if scratch--gptel-commit-cancelled
-      (message "gptel: commit message generation cancelled")
-    (when scratch--gptel-magit-saved-callback
-      (funcall scratch--gptel-magit-saved-callback msg))))
+  (cond
+   (scratch--gptel-commit-cancelled
+    (message "gptel: commit message generation cancelled"))
+   ((null msg)
+    (message "gptel: commit message generation failed (empty response)"))
+   (scratch--gptel-magit-saved-callback
+    (funcall scratch--gptel-magit-saved-callback msg))))
 
 (defun scratch/gptel-magit-generate-wrapper (orig-fn cb)
   "Wrap ORIG-FN (`gptel-magit--generate', original CB) with cancel tracking."
