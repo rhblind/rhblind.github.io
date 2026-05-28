@@ -1,7 +1,7 @@
 +++
 title = "Scratch Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2026-05-28T00:47:11+02:00
+lastmod = 2026-05-28T22:15:50+02:00
 tags = ["org-mode"]
 categories = ["emacs", "scratch"]
 draft = false
@@ -142,7 +142,7 @@ imperceptible.
 ```emacs-lisp
 (require 'filenotify)
 
-(defun scratch/file-notify-rm-all-watches (&optional silent)
+(defun my/file-notify-rm-all-watches (&optional silent)
   "Drop all `file-notify' watches. Reset for the \"too many open files\" bug."
   (interactive)
   (if silent
@@ -151,7 +151,7 @@ imperceptible.
       (maphash (lambda (k _) (file-notify-rm-watch k)) file-notify-descriptors)
       (progress-reporter-done rep))))
 
-(run-with-timer 0 (* 5 60) #'scratch/file-notify-rm-all-watches t)
+(run-with-timer 0 (* 5 60) #'my/file-notify-rm-all-watches t)
 ```
 
 
@@ -190,27 +190,27 @@ the eager-packages block at the bottom of this file.
   ;; prompt. Without this, anything that touches the minibuffer
   ;; while `read-passwd' is active kills the pinentry (because
   ;; `enable-recursive-minibuffers' defaults to nil).
-  (defun scratch/pinentry-no-interrupt (orig-fn &rest args)
+  (defun my/pinentry-no-interrupt (orig-fn &rest args)
     "Prevent async minibuffer access from aborting PIN entry."
     (let ((enable-recursive-minibuffers t)
           (inhibit-message t))
       (apply orig-fn args)))
-  (advice-add 'pinentry--prompt :around #'scratch/pinentry-no-interrupt))
+  (advice-add 'pinentry--prompt :around #'my/pinentry-no-interrupt))
 
 ;; gpg-agent's notion of "current TTY" goes stale across SSH /
 ;; tmux / Emacs daemon restarts. Refresh it at startup and before
 ;; every magit commit (the most common trigger for a passphrase
 ;; prompt) so signing doesn't fall over with "Inappropriate ioctl".
-(defun scratch/gpg-update-tty ()
+(defun my/gpg-update-tty ()
   "Tell gpg-agent the current TTY so pinentry can attach to it."
   (call-process "gpg-connect-agent" nil nil nil
                 "updatestartuptty" "/bye"))
 
-(scratch/gpg-update-tty)
+(my/gpg-update-tty)
 
 (with-eval-after-load 'magit
   (advice-add 'magit-commit-create :before
-              (lambda (&rest _) (scratch/gpg-update-tty))))
+              (lambda (&rest _) (my/gpg-update-tty))))
 ```
 
 
@@ -732,41 +732,65 @@ overwrites it. The advice below aborts the request and swallows any
 late-arriving callback.
 
 ```emacs-lisp
-(defvar scratch--gptel-commit-cancelled nil
+(defvar my--gptel-commit-cancelled nil
   "Non-nil when gptel commit generation has been cancelled.")
 
-(defvar scratch--gptel-magit-saved-callback nil
+(defvar my--gptel-magit-saved-callback nil
   "Stored callback for `gptel-magit' cancellation handling.")
 
-(defun scratch/gptel-abort-before-commit-nav (&rest _)
+(defun my/gptel-abort-before-commit-nav (&rest _)
   "Abort any pending gptel request before navigating commit history."
-  (setq scratch--gptel-commit-cancelled t)
+  (setq my--gptel-commit-cancelled t)
   (when (fboundp 'gptel-abort)
     (ignore-errors (gptel-abort))))
 
-(defun scratch/gptel-magit-callback-wrapper (msg)
+(defun my/gptel-magit-callback-wrapper (msg)
   "Forward MSG to the saved callback, unless generation was cancelled."
   (cond
-   (scratch--gptel-commit-cancelled
+   (my--gptel-commit-cancelled
     (message "gptel: commit message generation cancelled"))
    ((null msg)
     (message "gptel: commit message generation failed (empty response)"))
-   (scratch--gptel-magit-saved-callback
-    (funcall scratch--gptel-magit-saved-callback msg))))
+   (my--gptel-magit-saved-callback
+    (funcall my--gptel-magit-saved-callback msg))))
 
-(defun scratch/gptel-magit-generate-wrapper (orig-fn cb)
+(defun my/gptel-magit-generate-wrapper (orig-fn cb)
   "Wrap ORIG-FN (`gptel-magit--generate', original CB) with cancel tracking."
-  (setq scratch--gptel-commit-cancelled nil
-        scratch--gptel-magit-saved-callback cb)
+  (setq my--gptel-commit-cancelled nil
+        my--gptel-magit-saved-callback cb)
   (message "gptel: generating commit message...")
-  (funcall orig-fn #'scratch/gptel-magit-callback-wrapper))
+  (funcall orig-fn #'my/gptel-magit-callback-wrapper))
 
 (with-eval-after-load 'git-commit
-  (advice-add 'git-commit-prev-message :before #'scratch/gptel-abort-before-commit-nav)
-  (advice-add 'git-commit-next-message :before #'scratch/gptel-abort-before-commit-nav))
+  (advice-add 'git-commit-prev-message :before #'my/gptel-abort-before-commit-nav)
+  (advice-add 'git-commit-next-message :before #'my/gptel-abort-before-commit-nav))
 
 (with-eval-after-load 'gptel-magit
-  (advice-add 'gptel-magit--generate :around #'scratch/gptel-magit-generate-wrapper))
+  (advice-add 'gptel-magit--generate :around #'my/gptel-magit-generate-wrapper))
+```
+
+
+### ECA {#eca}
+
+Point [ECA](https://github.com/editor-code-assistant/eca-emacs) at a self-hosted GLM-5.1 instance behind an
+OpenAI-compatible endpoint. The API key is read from
+`~/.authinfo.gpg` at session start so it never appears in config
+files.
+
+```emacs-lisp
+(defun my/eca-set-api-env ()
+  "Set ECA environment variables from authinfo before the server starts."
+  (require 'auth-source)
+  (let ((found (car (auth-source-search :host "rolf-020871d4-llm.ai.intility.app"
+                                        :max 1))))
+    (when found
+      (let ((secret (auth-info-password found)))
+        (when secret
+          (setenv "OPENAI_API_KEY" secret)))))
+  (setenv "OPENAI_API_URL" "https://rolf-020871d4-llm.ai.intility.app"))
+
+(with-eval-after-load 'eca
+  (add-hook 'eca-before-initialize-hook #'my/eca-set-api-env))
 ```
 
 
@@ -834,6 +858,7 @@ are fully wired up before any user code in `config.el` runs.
           :checkers   syntax
           :lang       (org +roam +hugo +pretty) markdown csharp elixir erlang json yaml
           :tools      (lsp +peek) direnv mise just
+          :llm        (claude-ide +mcp +ide-diff) (eca +completion)
           :term       vterm
           :os         macos
           :ui         dashboard theme modeline (fonts +ligatures) treemacs workspaces
