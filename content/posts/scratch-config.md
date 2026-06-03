@@ -1,7 +1,7 @@
 +++
 title = "Scratch Emacs Configuration"
 author = ["Rolf Håvard Blindheim"]
-lastmod = 2026-05-28T22:15:50+02:00
+lastmod = 2026-06-03T22:29:27+02:00
 tags = ["org-mode"]
 categories = ["emacs", "scratch"]
 draft = false
@@ -777,20 +777,37 @@ OpenAI-compatible endpoint. The API key is read from
 `~/.authinfo.gpg` at session start so it never appears in config
 files.
 
+Setup on a new machine:
+
+1.  Symlink the ECA config from dotfiles:
+
+    ```text
+    mkdir -p ~/.config/eca
+    ln -s ~/.dotfiles/eca/config.json ~/.config/eca/config.json
+    ```
+2.  Add an entry to `~/.authinfo.gpg`:
+
+    ```text
+    machine endpoint.my.api.provider.com login apikey password YOUR_SECRET
+    ```
+3.  Run `scratch sync` to install the `eca` module.
+
+<!--listend-->
+
 ```emacs-lisp
 (defun my/eca-set-api-env ()
-  "Set ECA environment variables from authinfo before the server starts."
+  "Set OPENAI_API_KEY from authinfo before the ECA server starts."
   (require 'auth-source)
   (let ((found (car (auth-source-search :host "rolf-020871d4-llm.ai.intility.app"
                                         :max 1))))
     (when found
       (let ((secret (auth-info-password found)))
         (when secret
-          (setenv "OPENAI_API_KEY" secret)))))
-  (setenv "OPENAI_API_URL" "https://rolf-020871d4-llm.ai.intility.app"))
+          (setenv "OPENAI_API_KEY" secret))))))
 
 (with-eval-after-load 'eca
-  (add-hook 'eca-before-initialize-hook #'my/eca-set-api-env))
+  (my/eca-set-api-env)
+  (setq eca-chat-custom-model "intility/GLM-5.1"))
 ```
 
 
@@ -857,6 +874,7 @@ are fully wired up before any user code in `config.el` runs.
           :emacs      (vc +forge +gutter) ibuffer (dired +preview)
           :checkers   syntax
           :lang       (org +roam +hugo +pretty) markdown csharp elixir erlang json yaml
+                      (javascript +deno)
           :tools      (lsp +peek) direnv mise just
           :llm        (claude-ide +mcp +ide-diff) (eca +completion)
           :term       vterm
